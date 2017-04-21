@@ -97,17 +97,11 @@ int init(char *filename, char *sizeString) {
             return -1;
         }
         totalBytesWritten = bytesWritten;
+        char junkArray[BUFFER];
         while (totalBytesWritten < dataAmountSizeBytes) {
             size_t delta = dataAmountSizeBytes - totalBytesWritten;
-            size_t bytesToWrite = delta > BUFFER ? BUFFER : delta+1;
-            char junkArray[bytesToWrite];
-//            for (int j = 0; j< bytesToWrite; j++) {
-//                junkArray[j] = 'a';
-//            }
-            if (delta <= BUFFER) {
-                junkArray[bytesToWrite] = '\0';
-            }
-            bytesWritten = write(fdOut, junkArray, bytesToWrite);
+            size_t bytesToWrite = delta > BUFFER ? BUFFER : delta;
+            bytesWritten = write(fdOut, &junkArray, bytesToWrite);
             if (bytesWritten < 0) {
                 close(fdOut);
                 printf("Error when writing to file\n");
@@ -121,5 +115,5 @@ int init(char *filename, char *sizeString) {
 };
 
 int main() {
-    init("./hello.txt", "1M");
+    init("./hello.txt", "34450B");
 }
