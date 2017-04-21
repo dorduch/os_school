@@ -114,6 +114,56 @@ int init(char *filename, char *sizeString) {
     return 0;
 };
 
+void sizeToString(ssize_t size, char* str){
+    ssize_t lastSize = size;
+    char prefixArr[] = {'B', 'K', 'M', 'G'};
+    int index = 0;
+    size = size / 1024;
+    while(size > 0) {
+        lastSize = size;
+        index ++;
+        size = size / 1024;
+        if (prefixArr[index] == 'G') {
+            break;
+        }
+    }
+    sprintf(str, "%zd%c", lastSize, prefixArr[index]);
+}
+
+int getCatalogFromFile(char* filename, Catalog* catalog){
+    ssize_t readBytes;
+    int fdIn = open(filename, O_RDWR);
+    if (fdIn < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        return -1;
+    }
+    readBytes = read(fdIn, &catalog, sizeof(catalog));
+    if (readBytes < 0) {
+        close(fdIn);
+        printf("Error reading file\n");
+        return -1;
+    }
+}
+
+int listFiles(char *filename) {
+    Catalog catalog;
+    if (getCatalogFromFile(filename, &catalog) == -1) {
+        return -1;
+    }
+    for (int i = 0; i<100; i++) {
+        FatItem item = catalog.fat[i];
+        if (!item.isEmpty) {
+            char itemSize[1024];
+            sizeToString(item.size, itemSize);
+            //CREDIT print t_time: https://www.tutorialspoint.com/c_standard_library/c_function_ctime.htm
+            printf("%s\t%s\t%o\t%s\n", item.filename, itemSize, item.protection, ctime(&item.insertionDataStamp));
+        }
+    }
+
+
+};
+
 int main() {
     init("./hello.txt", "34450B");
+
 }
