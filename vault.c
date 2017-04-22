@@ -15,6 +15,9 @@
 
 
 const int TEXT_LENGTH = 257;
+const char* DATABLOCK_START = "<<<<<<<<";
+const char* DATABLOCK_END = ">>>>>>>>";
+const int DATABLOCK_PADDING = 8;
 const int BUFFER = 4 * 1024;
 #define _FILE_OFFSET_BITS 64
 
@@ -295,8 +298,46 @@ Datablock *getSortedFreeDatablocks(Catalog catalog) {
 
 int writeDatablockToFile(int fd, Datablock datablock, char* data){
     //fd should be file descriptor that is able to overwrite
-
-
+    // data size should be datablock size
+    char buffer[BUFFER];
+    int bufferIndex = 0;
+    ssize_t bytesWritten;
+    ssize_t datablockSize = datablock.size - (2 * DATABLOCK_PADDING);
+    if (datablockSize <1) {
+        printf("Datablock size is too small\n");
+        return -1;
+    }
+    lseek(fd, datablock.offset, SEEK_SET);
+    bytesWritten = write(fd, DATABLOCK_START, DATABLOCK_PADDING);
+    if (bytesWritten < 0) {
+        printf("Error when writing to file\n");
+        return -1;
+    }
+    for (size_t i = 0; i< datablockSize; i++) {
+        buffer[bufferIndex] = data[i];
+        bufferIndex ++;
+        if (bufferIndex == BUFFER) {
+            bufferIndex = 0;
+            write(fd, buffer, BUFFER);
+            if (bytesWritten < 0) {
+                printf("Error when writing to file\n");
+                return -1;
+            }
+        }
+    }
+    if (bufferIndex > 0) {
+        write(fd, buffer, (size_t)bufferIndex);
+        if (bytesWritten < 0) {
+            printf("Error when writing to file\n");
+            return -1;
+        }
+    }
+    write(fd, DATABLOCK_END, DATABLOCK_PADDING);
+    if (bytesWritten < 0) {
+        printf("Error when writing to file\n");
+        return -1;
+    }
+    return 0;
 }
 
 int insertFile(char *vaultName, char *filePath) {
