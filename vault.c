@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <libgen.h>
 
 
 const int TEXT_LENGTH = 257;
@@ -139,16 +140,16 @@ void sizeToString(ssize_t size, char *str) {
     sprintf(str, "%zd%c", lastSize, prefixArr[index]);
 }
 
-Catalog getCatalogFromFile(int fdIn) {
+int getCatalogFromFile(int fdIn, Catalog* catalog) {
     ssize_t readBytes;
-    Catalog catalog;
-    readBytes = read(fdIn, &catalog, sizeof(Catalog));
+    Catalog res;
+    readBytes = read(fdIn, &res, sizeof(Catalog));
     if (readBytes < 0) {
-        close(fdIn);
         printf("Error reading file\n");
-        return catalog;
+        return -1;
     }
-    return catalog;
+    *catalog = res;
+    return 0;
 }
 
 int writeCatalogToVault(int vaultFd, Catalog catalog) {
@@ -156,7 +157,6 @@ int writeCatalogToVault(int vaultFd, Catalog catalog) {
     lseek(vaultFd, 0, SEEK_SET);
     BytesWritten = write(vaultFd, &catalog, sizeof(Catalog));
     if (BytesWritten < 0) {
-        close(vaultFd);
         printf("Error reading file\n");
         return -1;
     }
@@ -164,11 +164,17 @@ int writeCatalogToVault(int vaultFd, Catalog catalog) {
 }
 
 int listFiles(char *filename) {
-    Catalog catalog = getCatalogFromFile(filename);
-    // todo handle error
-//    if (catalog == NU) {
-//        return -1;
-//    }
+    Catalog catalog;
+    int fdIn = open(filename, O_RDONLY);
+    if (fdIn < 0) {
+        printf("Error reading file\n");
+        return -1;
+    }
+    if (getCatalogFromFile(fdIn, &catalog) == -1) {
+        printf("Error when opening vault\n");
+        close(fdIn);
+        return -1;
+    };
     for (int i = 0; i < 100; i++) {
         FatItem item = catalog.fat[i];
         if (!item.isEmpty) {
@@ -179,7 +185,9 @@ int listFiles(char *filename) {
         }
     }
 
+    close(fdIn);
 
+    return 0;
 };
 
 //CREDIT check file size: http://www.linuxquestions.org/questions/programming-9/how-to-get-size-of-file-in-c-183360/
@@ -385,11 +393,17 @@ int insertFile(char *vaultName, char *filePath) {
     int fileFd = open(filePath, O_RDONLY);
     if (fileFd < 0) {
         printf("Error opening input file: %s\n", strerror(errno));
+        close(vaultFd);
         return -1;
     }
 
-    Catalog catalog = getCatalogFromFile(vaultFd);
-    // todo error handling
+    Catalog catalog;
+    if (getCatalogFromFile(vaultFd, &catalog) == -1){
+        printf("Error opening input file\n");
+        close(fileFd);
+        close(vaultFd);
+        return -1;
+    };
 
     int freeFatSlotIndex = -1;
     for (i = 0; i < 100; i++) {
@@ -399,18 +413,24 @@ int insertFile(char *vaultName, char *filePath) {
         }
     }
     if (freeFatSlotIndex == -1) {
-        printf("File capacity exceeded");
+        printf("File capacity exceeded\n");
+        close(fileFd);
+        close(vaultFd);
         return 0;
     }
 
     off_t fileSize = getFileSize(filePath);
     mode_t filePermissions = getFilePermissions(filePath);
     if (fileSize == 0) {
-        printf("File is empty");
+        printf("File is empty\n");
+        close(fileFd);
+        close(vaultFd);
         return 0;
     }
 
     if (filePermissions == NULL) {
+        close(fileFd);
+        close(vaultFd);
         return -1;
     }
     Datablock *freeDatablocks = getSortedFreeDatablocks(catalog);
@@ -425,13 +445,15 @@ int insertFile(char *vaultName, char *filePath) {
                (freeDatablocks[0].size + freeDatablocks[1].size + freeDatablocks[2].size + 6 * DATABLOCK_PADDING)) {
         numOfBlocks = 3;
     } else {
-        printf("Not enough free space to insert file");
+        printf("Not enough free space to insert file\n");
+        close(fileFd);
+        close(vaultFd);
         return 0;
     }
     gettimeofday(&timestamp, NULL);
     catalog.fat[freeFatSlotIndex].isEmpty = false;
     catalog.fat[freeFatSlotIndex].size = fileSize;
-    strcpy(catalog.fat[freeFatSlotIndex].filename, filePath);
+    strcpy(catalog.fat[freeFatSlotIndex].filename, basename(filePath));
     catalog.fat[freeFatSlotIndex].insertionDataStamp = timestamp.tv_sec;
     catalog.fat[freeFatSlotIndex].protection = filePermissions;
     catalog.metadata.numOfFiles++;
@@ -462,21 +484,44 @@ int insertFile(char *vaultName, char *filePath) {
 
 
     if (writeDatablocksToFile(vaultFd,freeDatablocks, fileFd, numOfBlocks, (size_t)fileSize) == -1) {
+        close(fileFd);
+        close(vaultFd);
         return -1;
     };
 
     if (writeCatalogToVault(vaultFd, catalog) == -1) {
+        close(fileFd);
+        close(vaultFd);
         return -1;
     }
+
+    close(fileFd);
+    close(vaultFd);
 
     return 0;
 
 };
 
-int main() {
-    init("./hello.txt", "1M");
-    insertFile("./hello.txt", "./hello2.txt");
+int deleteFile(char* vaultName, char *filePath) {
+    struct timeval timestamp;
+    int vaultFd = open(vaultName, O_RDWR);
+    if (vaultFd < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        return -1;
+    }
+    Catalog catalog;
+    if (getCatalogFromFile(vaultFd, &catalog) == -1) {
+        printf("Error opening input file\n");
+        return -1;
+    };
+}
 
-    Catalog catalog1 = getCatalogFromFile(open("./hello.txt", O_RDONLY));
+
+int main() {
+//    init("./hello.txt", "1M");
+//    insertFile("./hello.txt", "./hello2.txt");
+
+    Catalog catalog1;
+    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
 
 }
