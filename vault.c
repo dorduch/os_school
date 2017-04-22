@@ -460,7 +460,7 @@ int insertFile(char *vaultName, char *filePath) {
     catalog.metadata.lastModified = timestamp.tv_sec;
 
     if (numOfBlocks == 1) {
-        catalog.fat[freeFatSlotIndex].dataBlock1Size = fileSize;
+        catalog.fat[freeFatSlotIndex].dataBlock1Size = fileSize+ 2*DATABLOCK_PADDING;
         catalog.fat[freeFatSlotIndex].dataBlock2Size = 0;
         catalog.fat[freeFatSlotIndex].dataBlock3Size = 0;
         catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
@@ -468,7 +468,7 @@ int insertFile(char *vaultName, char *filePath) {
         catalog.fat[freeFatSlotIndex].dataBlock3Offset = 0;
     } else if (numOfBlocks == 2) {
         catalog.fat[freeFatSlotIndex].dataBlock1Size = freeDatablocks[0].size;
-        catalog.fat[freeFatSlotIndex].dataBlock2Size = fileSize - freeDatablocks[0].size;
+        catalog.fat[freeFatSlotIndex].dataBlock2Size = (fileSize + 2 * DATABLOCK_PADDING) - freeDatablocks[0].size;
         catalog.fat[freeFatSlotIndex].dataBlock3Size = 0;
         catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
         catalog.fat[freeFatSlotIndex].dataBlock2Offset = freeDatablocks[1].offset;
@@ -476,7 +476,7 @@ int insertFile(char *vaultName, char *filePath) {
     } else {
         catalog.fat[freeFatSlotIndex].dataBlock1Size = freeDatablocks[0].size;
         catalog.fat[freeFatSlotIndex].dataBlock2Size = freeDatablocks[1].size;
-        catalog.fat[freeFatSlotIndex].dataBlock3Size = fileSize - freeDatablocks[0].size - freeDatablocks[1].size;
+        catalog.fat[freeFatSlotIndex].dataBlock3Size = (fileSize + 2 * DATABLOCK_PADDING) - freeDatablocks[0].size - freeDatablocks[1].size;
         catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
         catalog.fat[freeFatSlotIndex].dataBlock2Offset = freeDatablocks[1].offset;
         catalog.fat[freeFatSlotIndex].dataBlock3Offset = freeDatablocks[2].offset;
@@ -502,8 +502,39 @@ int insertFile(char *vaultName, char *filePath) {
 
 };
 
-int deleteFile(char* vaultName, char *filePath) {
+int getFilenameFatIndex(const char *filename, Catalog *catalog) {
+    int fatIndex = -1;
+
+    for (int i =0; i< 100; i++) {
+        if (strcmp((*catalog).fat[i].filename, filename) == 0) {
+            fatIndex = i;
+            break;
+        }
+    }
+    return fatIndex;
+}
+
+int deleteBlockFromFile(ssize_t size, off_t offset, int fd) {
+    char writeBuffer[8];
+    ssize_t bytesWritten;
+    lseek(fd, offset, SEEK_SET);
+    bytesWritten = write(fd, writeBuffer, 8);
+    if (bytesWritten < 0) {
+        printf("Can't delete block from vault\n");
+        return -1;
+    }
+    lseek(fd, size-16, SEEK_CUR);
+    bytesWritten = write(fd, writeBuffer, 8);
+    if (bytesWritten < 0) {
+        printf("Can't delete block from vault\n");
+        return -1;
+    }
+    return 0;
+};
+
+int deleteFile(char* vaultName, char *filename) {
     struct timeval timestamp;
+    gettimeofday(&timestamp, NULL);
     int vaultFd = open(vaultName, O_RDWR);
     if (vaultFd < 0) {
         printf("Error opening input file: %s\n", strerror(errno));
@@ -514,14 +545,49 @@ int deleteFile(char* vaultName, char *filePath) {
         printf("Error opening input file\n");
         return -1;
     };
+    int fatIndex = getFilenameFatIndex(filename, &catalog);
+
+    if(fatIndex == -1) {
+        printf("File not exists in vault\n");
+        close(vaultFd);
+        return -1;
+    }
+
+    catalog.fat[fatIndex].isEmpty = true;
+    if (catalog.fat[fatIndex].dataBlock1Size > 0) {
+        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock1Size, catalog.fat[fatIndex].dataBlock1Offset, vaultFd) == -1){
+            close(vaultFd);
+            return -1;
+        };
+    }
+    if (catalog.fat[fatIndex].dataBlock2Size > 0) {
+        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock2Size, catalog.fat[fatIndex].dataBlock2Offset, vaultFd) == -1) {
+            close(vaultFd);
+            return -1;
+        };
+    }
+    if (catalog.fat[fatIndex].dataBlock3Size > 0) {
+        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock3Size, catalog.fat[fatIndex].dataBlock3Offset, vaultFd) == -1) {
+            close(vaultFd);
+            return -1;
+        };
+    }
+
+    catalog.metadata.numOfFiles--;
+    catalog.metadata.lastModified = timestamp.tv_sec;
+    if (writeCatalogToVault(vaultFd, catalog) == -1) {
+        close(vaultFd);
+        return -1;
+    };
+    close(vaultFd);
+    return 0;
 }
 
 
 int main() {
-//    init("./hello.txt", "1M");
-//    insertFile("./hello.txt", "./hello2.txt");
-
+    init("./hello.txt", "1M");
+    insertFile("./hello.txt", "./hello2.txt");
+    deleteFile("./hello.txt", "hello2.txt");
     Catalog catalog1;
     getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
-
 }
