@@ -46,6 +46,12 @@ typedef struct catalog {
     FatItem fat[100];
 } Catalog;
 
+typedef struct data_block {
+    off_t offset;
+    bool isFree;
+    ssize_t size;
+} Datablock;
+
 
 int init(char *filename, char *sizeString) {
 
@@ -114,14 +120,14 @@ int init(char *filename, char *sizeString) {
     return 0;
 };
 
-void sizeToString(ssize_t size, char* str){
+void sizeToString(ssize_t size, char *str) {
     ssize_t lastSize = size;
     char prefixArr[] = {'B', 'K', 'M', 'G'};
     int index = 0;
     size = size / 1024;
-    while(size > 0) {
+    while (size > 0) {
         lastSize = size;
-        index ++;
+        index++;
         size = size / 1024;
         if (prefixArr[index] == 'G') {
             break;
@@ -130,27 +136,30 @@ void sizeToString(ssize_t size, char* str){
     sprintf(str, "%zd%c", lastSize, prefixArr[index]);
 }
 
-int getCatalogFromFile(char* filename, Catalog* catalog){
+Catalog getCatalogFromFile(char *filename) {
     ssize_t readBytes;
+    Catalog catalog;
     int fdIn = open(filename, O_RDWR);
     if (fdIn < 0) {
         printf("Error opening input file: %s\n", strerror(errno));
-        return -1;
+        return catalog;
     }
-    readBytes = read(fdIn, &catalog, sizeof(catalog));
+    readBytes = read(fdIn, &catalog, sizeof(Catalog));
     if (readBytes < 0) {
         close(fdIn);
         printf("Error reading file\n");
-        return -1;
+        return catalog;
     }
+    return catalog;
 }
 
 int listFiles(char *filename) {
-    Catalog catalog;
-    if (getCatalogFromFile(filename, &catalog) == -1) {
-        return -1;
-    }
-    for (int i = 0; i<100; i++) {
+    Catalog catalog = getCatalogFromFile(filename);
+    // todo handle error
+//    if (catalog == NU) {
+//        return -1;
+//    }
+    for (int i = 0; i < 100; i++) {
         FatItem item = catalog.fat[i];
         if (!item.isEmpty) {
             char itemSize[1024];
@@ -163,7 +172,142 @@ int listFiles(char *filename) {
 
 };
 
+//todo check if delete
+off_t fsize(const char *filename) {
+    struct stat st;
+
+    if (stat(filename, &st) == 0)
+        return st.st_size;
+
+    fprintf(stderr, "Cannot determine size of %s: %s\n",
+            filename, strerror(errno));
+
+    return -1;
+}
+
+int sortDatablocksByOffset(const void *a, const void *b) {
+    Datablock datablock1;
+    Datablock datablock2;
+    datablock1 = *(Datablock *) a;
+    datablock2 = *(Datablock *) b;
+    if (datablock1.isFree) {
+        return 1;
+    }
+    if (datablock2.isFree) {
+        return -1;
+    }
+    int retVal = datablock1.offset - datablock2.offset < 0 ? -1 : 1;
+    return (retVal);
+}
+
+int sortFreeDatablocksBySize(const void *a, const void *b) {
+    Datablock datablock1;
+    Datablock datablock2;
+    datablock1 = *(Datablock *) a;
+    datablock2 = *(Datablock *) b;
+    if (!datablock1.isFree) {
+        return 1;
+    }
+    if (!datablock2.isFree) {
+        return -1;
+    }
+    int retVal = datablock1.size - datablock2.size > 0 ? -1 : 1;
+    return (retVal);
+}
+
+Datablock *getSortedFreeDatablocks(Catalog catalog) {
+    off_t currentOffset = sizeof(catalog);
+    Datablock *res = (Datablock *) malloc(sizeof(Datablock) * 300);
+//    Datablock res[300];
+    Datablock occupiedDatablocks[300];
+    int index = 0;
+    int i;
+    // filling occupied datablocks array
+    for (i = 0; i < 100; i++) {
+        if (!catalog.fat[i].isEmpty) {
+            Datablock datablock;
+            datablock.size = catalog.fat[i].dataBlock1Size;
+            datablock.offset = catalog.fat[i].dataBlock1Offset;
+            datablock.isFree = false;
+            occupiedDatablocks[index] = datablock;
+            index++;
+            if (catalog.fat[i].dataBlock2Size > 0) {
+                Datablock datablock2;
+                datablock2.size = catalog.fat[i].dataBlock2Size;
+                datablock2.isFree = false;
+                datablock2.offset = catalog.fat[i].dataBlock2Offset;
+                occupiedDatablocks[index] = datablock2;
+                index++;
+            }
+            if (catalog.fat[i].dataBlock3Size > 0) {
+                Datablock datablock3;
+                datablock3.size = catalog.fat[i].dataBlock3Size;
+                datablock3.isFree = false;
+                datablock3.offset = catalog.fat[i].dataBlock3Offset;
+                occupiedDatablocks[index] = datablock3;
+                index++;
+            }
+        }
+    }
+    for (i = index; i < 300; i++) {
+        Datablock datablock;
+        datablock.isFree = true;
+        occupiedDatablocks[i] = datablock;
+    }
+
+    qsort(occupiedDatablocks, 300, sizeof(Datablock), sortDatablocksByOffset);
+    //occupied datablocks array should be sorted by offset (all the free blocks should be last)
+    index = 0;
+    off_t delta;
+    for (i = 0; i < 300; i++) {
+        if (occupiedDatablocks[i].isFree) {
+            break;
+        }
+        Datablock currDatablock = occupiedDatablocks[i];
+        delta = currDatablock.offset - currentOffset;
+        if (delta > 0) {
+            Datablock freeDatablock;
+            freeDatablock.offset = currentOffset + 1;
+            freeDatablock.size = delta;
+            freeDatablock.isFree = true;
+            res[index] = freeDatablock;
+            index++;
+        }
+        currentOffset = currDatablock.offset + currDatablock.size;
+    }
+    delta = catalog.metadata.fileSize - currentOffset;
+    if (delta > 0) {
+        Datablock freeDatablock;
+        freeDatablock.offset = currentOffset + 1;
+        freeDatablock.size = delta;
+        freeDatablock.isFree = true;
+        res[index] = freeDatablock;
+        index++;
+    }
+    for (i = index; i < 300; i++) {
+        Datablock datablock;
+        datablock.isFree = false;
+        res[i] = datablock;
+    }
+    qsort(res, 300, sizeof(Datablock), sortFreeDatablocksBySize);
+    return res;
+}
+
+int writeDatablockToFile(int fd, Datablock datablock, char* data){
+    //fd should be file descriptor that is able to overwrite
+
+
+}
+
+int insertFile(char *vaultName, char *filePath) {
+
+
+};
+
 int main() {
-    init("./hello.txt", "34450B");
+    init("./hello.txt", "1M");
+    Catalog catalog1;
+    catalog1 = getCatalogFromFile("./hello.txt");
+    Datablock *datablock = getSortedFreeDatablocks(catalog1);
 
 }
