@@ -15,8 +15,8 @@
 
 
 const int TEXT_LENGTH = 257;
-const char* DATABLOCK_START = "<<<<<<<<";
-const char* DATABLOCK_END = ">>>>>>>>";
+const char *DATABLOCK_START = "<<<<<<<<";
+const char *DATABLOCK_END = ">>>>>>>>";
 const int DATABLOCK_PADDING = 8;
 const int BUFFER = 4 * 1024;
 #define _FILE_OFFSET_BITS 64
@@ -139,14 +139,9 @@ void sizeToString(ssize_t size, char *str) {
     sprintf(str, "%zd%c", lastSize, prefixArr[index]);
 }
 
-Catalog getCatalogFromFile(char *filename) {
+Catalog getCatalogFromFile(int fdIn) {
     ssize_t readBytes;
     Catalog catalog;
-    int fdIn = open(filename, O_RDWR);
-    if (fdIn < 0) {
-        printf("Error opening input file: %s\n", strerror(errno));
-        return catalog;
-    }
     readBytes = read(fdIn, &catalog, sizeof(Catalog));
     if (readBytes < 0) {
         close(fdIn);
@@ -154,6 +149,18 @@ Catalog getCatalogFromFile(char *filename) {
         return catalog;
     }
     return catalog;
+}
+
+int writeCatalogToVault(int vaultFd, Catalog catalog) {
+    ssize_t BytesWritten;
+    lseek(vaultFd, 0, SEEK_SET);
+    BytesWritten = write(vaultFd, &catalog, sizeof(Catalog));
+    if (BytesWritten < 0) {
+        close(vaultFd);
+        printf("Error reading file\n");
+        return -1;
+    }
+    return 0;
 }
 
 int listFiles(char *filename) {
@@ -175,8 +182,8 @@ int listFiles(char *filename) {
 
 };
 
-//todo check if delete
-off_t fsize(const char *filename) {
+//CREDIT check file size: http://www.linuxquestions.org/questions/programming-9/how-to-get-size-of-file-in-c-183360/
+off_t getFileSize(const char *filename) {
     struct stat st;
 
     if (stat(filename, &st) == 0)
@@ -186,6 +193,19 @@ off_t fsize(const char *filename) {
             filename, strerror(errno));
 
     return -1;
+}
+
+//CREDIT get file permissions: http://stackoverflow.com/questions/20238042/is-there-a-c-function-to-get-permissions-of-a-file
+mode_t getFilePermissions(const char *filename) {
+    struct stat st;
+
+    if (stat(filename, &st) == 0)
+        return st.st_mode;
+
+    fprintf(stderr, "Cannot determine permissions of %s: %s\n",
+            filename, strerror(errno));
+
+    return NULL;
 }
 
 int sortDatablocksByOffset(const void *a, const void *b) {
@@ -296,59 +316,167 @@ Datablock *getSortedFreeDatablocks(Catalog catalog) {
     return res;
 }
 
-int writeDatablockToFile(int fd, Datablock datablock, char* data){
+int writeDatablocksToFile(int outputFd, Datablock *datablocksArr, int fileFd, int numOfBlocks, size_t fileSize) {
     //fd should be file descriptor that is able to overwrite
-    // data size should be datablock size
-    char buffer[BUFFER];
-    int bufferIndex = 0;
-    ssize_t bytesWritten;
-    ssize_t datablockSize = datablock.size - (2 * DATABLOCK_PADDING);
-    if (datablockSize <1) {
-        printf("Datablock size is too small\n");
-        return -1;
-    }
-    lseek(fd, datablock.offset, SEEK_SET);
-    bytesWritten = write(fd, DATABLOCK_START, DATABLOCK_PADDING);
-    if (bytesWritten < 0) {
-        printf("Error when writing to file\n");
-        return -1;
-    }
-    for (size_t i = 0; i< datablockSize; i++) {
-        buffer[bufferIndex] = data[i];
-        bufferIndex ++;
-        if (bufferIndex == BUFFER) {
-            bufferIndex = 0;
-            write(fd, buffer, BUFFER);
+    char inBuffer[BUFFER];
+    for (int j = 0; j < numOfBlocks; j++) {
+        ssize_t totalBytesRead = 0;
+        ssize_t bytesWritten;
+        ssize_t delta;
+        ssize_t bytesRead;
+        ssize_t datablockSize = datablocksArr[j].size - (2 * DATABLOCK_PADDING);
+        lseek(outputFd, datablocksArr[j].offset, SEEK_SET);
+        bytesWritten = write(outputFd, DATABLOCK_START, DATABLOCK_PADDING);
+        if (bytesWritten < 0) {
+            printf("Error when writing to file\n");
+            return -1;
+        }
+
+        bytesRead = read(fileFd, inBuffer, BUFFER);
+        if (bytesRead < 0) {
+            printf("Error when writing to file\n");
+            return -1;
+        }
+        totalBytesRead += bytesRead;
+        while (totalBytesRead < datablockSize) {
+            bytesWritten = write(outputFd, inBuffer, (size_t) bytesRead);
+            if (bytesWritten < 0) {
+                printf("Error when writing to file\n");
+                return -1;
+            }
+            bytesRead = read(fileFd, inBuffer, BUFFER);
+            if (bytesRead < 0) {
+                printf("Error when writing to file\n");
+                return -1;
+            }
+            if (bytesRead == 0) {
+                break;
+            }
+            totalBytesRead += bytesRead;
+        }
+        delta = fileSize - totalBytesRead;
+        if (delta > 0) {
+            bytesWritten = write(outputFd, inBuffer, (size_t) delta);
             if (bytesWritten < 0) {
                 printf("Error when writing to file\n");
                 return -1;
             }
         }
-    }
-    if (bufferIndex > 0) {
-        write(fd, buffer, (size_t)bufferIndex);
+        write(outputFd, DATABLOCK_END, DATABLOCK_PADDING);
         if (bytesWritten < 0) {
             printf("Error when writing to file\n");
             return -1;
         }
+        lseek(fileFd, datablockSize + 1, SEEK_SET);
     }
-    write(fd, DATABLOCK_END, DATABLOCK_PADDING);
-    if (bytesWritten < 0) {
-        printf("Error when writing to file\n");
-        return -1;
-    }
+
     return 0;
 }
 
 int insertFile(char *vaultName, char *filePath) {
+    int i;
+    struct timeval timestamp;
+    int vaultFd = open(vaultName, O_RDWR);
+    if (vaultFd < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        return -1;
+    }
 
+    int fileFd = open(filePath, O_RDONLY);
+    if (fileFd < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        return -1;
+    }
+
+    Catalog catalog = getCatalogFromFile(vaultFd);
+    // todo error handling
+
+    int freeFatSlotIndex = -1;
+    for (i = 0; i < 100; i++) {
+        if (catalog.fat[i].isEmpty) {
+            freeFatSlotIndex = i;
+            break;
+        }
+    }
+    if (freeFatSlotIndex == -1) {
+        printf("File capacity exceeded");
+        return 0;
+    }
+
+    off_t fileSize = getFileSize(filePath);
+    mode_t filePermissions = getFilePermissions(filePath);
+    if (fileSize == 0) {
+        printf("File is empty");
+        return 0;
+    }
+
+    if (filePermissions == NULL) {
+        return -1;
+    }
+    Datablock *freeDatablocks = getSortedFreeDatablocks(catalog);
+    int numOfBlocks = 0;
+    if (freeDatablocks[0].isFree && fileSize <= freeDatablocks[0].size + 2 * DATABLOCK_PADDING) {
+        numOfBlocks = 1;
+    } else if (freeDatablocks[0].isFree && freeDatablocks[1].isFree &&
+               fileSize <= (freeDatablocks[0].size + freeDatablocks[1].size + 4 * DATABLOCK_PADDING)) {
+        numOfBlocks = 2;
+    } else if (freeDatablocks[0].isFree && freeDatablocks[1].isFree && freeDatablocks[2].isFree &&
+               fileSize <=
+               (freeDatablocks[0].size + freeDatablocks[1].size + freeDatablocks[2].size + 6 * DATABLOCK_PADDING)) {
+        numOfBlocks = 3;
+    } else {
+        printf("Not enough free space to insert file");
+        return 0;
+    }
+    gettimeofday(&timestamp, NULL);
+    catalog.fat[freeFatSlotIndex].isEmpty = false;
+    catalog.fat[freeFatSlotIndex].size = fileSize;
+    strcpy(catalog.fat[freeFatSlotIndex].filename, filePath);
+    catalog.fat[freeFatSlotIndex].insertionDataStamp = timestamp.tv_sec;
+    catalog.fat[freeFatSlotIndex].protection = filePermissions;
+    catalog.metadata.numOfFiles++;
+    catalog.metadata.lastModified = timestamp.tv_sec;
+
+    if (numOfBlocks == 1) {
+        catalog.fat[freeFatSlotIndex].dataBlock1Size = fileSize;
+        catalog.fat[freeFatSlotIndex].dataBlock2Size = 0;
+        catalog.fat[freeFatSlotIndex].dataBlock3Size = 0;
+        catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
+        catalog.fat[freeFatSlotIndex].dataBlock2Offset = 0;
+        catalog.fat[freeFatSlotIndex].dataBlock3Offset = 0;
+    } else if (numOfBlocks == 2) {
+        catalog.fat[freeFatSlotIndex].dataBlock1Size = freeDatablocks[0].size;
+        catalog.fat[freeFatSlotIndex].dataBlock2Size = fileSize - freeDatablocks[0].size;
+        catalog.fat[freeFatSlotIndex].dataBlock3Size = 0;
+        catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
+        catalog.fat[freeFatSlotIndex].dataBlock2Offset = freeDatablocks[1].offset;
+        catalog.fat[freeFatSlotIndex].dataBlock3Offset = 0;
+    } else {
+        catalog.fat[freeFatSlotIndex].dataBlock1Size = freeDatablocks[0].size;
+        catalog.fat[freeFatSlotIndex].dataBlock2Size = freeDatablocks[1].size;
+        catalog.fat[freeFatSlotIndex].dataBlock3Size = fileSize - freeDatablocks[0].size - freeDatablocks[1].size;
+        catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
+        catalog.fat[freeFatSlotIndex].dataBlock2Offset = freeDatablocks[1].offset;
+        catalog.fat[freeFatSlotIndex].dataBlock3Offset = freeDatablocks[2].offset;
+    }
+
+
+    if (writeDatablocksToFile(vaultFd,freeDatablocks, fileFd, numOfBlocks, (size_t)fileSize) == -1) {
+        return -1;
+    };
+
+    if (writeCatalogToVault(vaultFd, catalog) == -1) {
+        return -1;
+    }
+
+    return 0;
 
 };
 
 int main() {
     init("./hello.txt", "1M");
-    Catalog catalog1;
-    catalog1 = getCatalogFromFile("./hello.txt");
-    Datablock *datablock = getSortedFreeDatablocks(catalog1);
+    insertFile("./hello.txt", "./hello2.txt");
+
+    Catalog catalog1 = getCatalogFromFile(open("./hello.txt", O_RDONLY));
 
 }
