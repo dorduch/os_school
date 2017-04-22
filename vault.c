@@ -612,6 +612,14 @@ int fetchFile(char *vaultName, char *filename) {
         close(vaultFd);
         return -1;
     }
+
+    int result = access("./", W_OK);
+    if (result != 0) {
+        printf("User doesn't have permissions to write in the directory\n");
+        close(vaultFd);
+        return -1;
+    }
+
     //CREDIT create file: http://pubs.opengroup.org/onlinepubs/009695399/functions/creat.html
     outFd = creat(filename, catalog.fat[fatIndex].protection);
     if (outFd < 0) {
@@ -757,8 +765,6 @@ int fetchFile(char *vaultName, char *filename) {
     close(vaultFd);
     close(outFd);
     return 0;
-
-
 };
 
 
