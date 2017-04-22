@@ -140,7 +140,7 @@ void sizeToString(ssize_t size, char *str) {
     sprintf(str, "%zd%c", lastSize, prefixArr[index]);
 }
 
-int getCatalogFromFile(int fdIn, Catalog* catalog) {
+int getCatalogFromFile(int fdIn, Catalog *catalog) {
     ssize_t readBytes;
     Catalog res;
     readBytes = read(fdIn, &res, sizeof(Catalog));
@@ -398,7 +398,7 @@ int insertFile(char *vaultName, char *filePath) {
     }
 
     Catalog catalog;
-    if (getCatalogFromFile(vaultFd, &catalog) == -1){
+    if (getCatalogFromFile(vaultFd, &catalog) == -1) {
         printf("Error opening input file\n");
         close(fileFd);
         close(vaultFd);
@@ -460,7 +460,7 @@ int insertFile(char *vaultName, char *filePath) {
     catalog.metadata.lastModified = timestamp.tv_sec;
 
     if (numOfBlocks == 1) {
-        catalog.fat[freeFatSlotIndex].dataBlock1Size = fileSize+ 2*DATABLOCK_PADDING;
+        catalog.fat[freeFatSlotIndex].dataBlock1Size = fileSize + 2 * DATABLOCK_PADDING;
         catalog.fat[freeFatSlotIndex].dataBlock2Size = 0;
         catalog.fat[freeFatSlotIndex].dataBlock3Size = 0;
         catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
@@ -476,14 +476,15 @@ int insertFile(char *vaultName, char *filePath) {
     } else {
         catalog.fat[freeFatSlotIndex].dataBlock1Size = freeDatablocks[0].size;
         catalog.fat[freeFatSlotIndex].dataBlock2Size = freeDatablocks[1].size;
-        catalog.fat[freeFatSlotIndex].dataBlock3Size = (fileSize + 2 * DATABLOCK_PADDING) - freeDatablocks[0].size - freeDatablocks[1].size;
+        catalog.fat[freeFatSlotIndex].dataBlock3Size =
+                (fileSize + 2 * DATABLOCK_PADDING) - freeDatablocks[0].size - freeDatablocks[1].size;
         catalog.fat[freeFatSlotIndex].dataBlock1Offset = freeDatablocks[0].offset;
         catalog.fat[freeFatSlotIndex].dataBlock2Offset = freeDatablocks[1].offset;
         catalog.fat[freeFatSlotIndex].dataBlock3Offset = freeDatablocks[2].offset;
     }
 
 
-    if (writeDatablocksToFile(vaultFd,freeDatablocks, fileFd, numOfBlocks, (size_t)fileSize) == -1) {
+    if (writeDatablocksToFile(vaultFd, freeDatablocks, fileFd, numOfBlocks, (size_t) fileSize) == -1) {
         close(fileFd);
         close(vaultFd);
         return -1;
@@ -505,7 +506,7 @@ int insertFile(char *vaultName, char *filePath) {
 int getFilenameFatIndex(const char *filename, Catalog *catalog) {
     int fatIndex = -1;
 
-    for (int i =0; i< 100; i++) {
+    for (int i = 0; i < 100; i++) {
         if (strcmp((*catalog).fat[i].filename, filename) == 0) {
             fatIndex = i;
             break;
@@ -523,7 +524,7 @@ int deleteBlockFromFile(ssize_t size, off_t offset, int fd) {
         printf("Can't delete block from vault\n");
         return -1;
     }
-    lseek(fd, size-16, SEEK_CUR);
+    lseek(fd, size - 16, SEEK_CUR);
     bytesWritten = write(fd, writeBuffer, 8);
     if (bytesWritten < 0) {
         printf("Can't delete block from vault\n");
@@ -532,7 +533,7 @@ int deleteBlockFromFile(ssize_t size, off_t offset, int fd) {
     return 0;
 };
 
-int deleteFile(char* vaultName, char *filename) {
+int deleteFile(char *vaultName, char *filename) {
     struct timeval timestamp;
     gettimeofday(&timestamp, NULL);
     int vaultFd = open(vaultName, O_RDWR);
@@ -547,7 +548,7 @@ int deleteFile(char* vaultName, char *filename) {
     };
     int fatIndex = getFilenameFatIndex(filename, &catalog);
 
-    if(fatIndex == -1) {
+    if (fatIndex == -1) {
         printf("File not exists in vault\n");
         close(vaultFd);
         return -1;
@@ -555,19 +556,22 @@ int deleteFile(char* vaultName, char *filename) {
 
     catalog.fat[fatIndex].isEmpty = true;
     if (catalog.fat[fatIndex].dataBlock1Size > 0) {
-        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock1Size, catalog.fat[fatIndex].dataBlock1Offset, vaultFd) == -1){
+        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock1Size, catalog.fat[fatIndex].dataBlock1Offset,
+                                vaultFd) == -1) {
             close(vaultFd);
             return -1;
         };
     }
     if (catalog.fat[fatIndex].dataBlock2Size > 0) {
-        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock2Size, catalog.fat[fatIndex].dataBlock2Offset, vaultFd) == -1) {
+        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock2Size, catalog.fat[fatIndex].dataBlock2Offset,
+                                vaultFd) == -1) {
             close(vaultFd);
             return -1;
         };
     }
     if (catalog.fat[fatIndex].dataBlock3Size > 0) {
-        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock3Size, catalog.fat[fatIndex].dataBlock3Offset, vaultFd) == -1) {
+        if (deleteBlockFromFile(catalog.fat[fatIndex].dataBlock3Size, catalog.fat[fatIndex].dataBlock3Offset,
+                                vaultFd) == -1) {
             close(vaultFd);
             return -1;
         };
@@ -583,11 +587,186 @@ int deleteFile(char* vaultName, char *filename) {
     return 0;
 }
 
+int fetchFile(char *vaultName, char *filename) {
+    int vaultFd = open(vaultName, O_RDONLY);
+    int outFd;
+    ssize_t bytesRead;
+    ssize_t bytesWritten;
+    ssize_t totalBytesRead = 0;
+    ssize_t delta;
+    ssize_t toRead;
+    char outBuffer[BUFFER];
+    if (vaultFd < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        return -1;
+    }
+    Catalog catalog;
+    if (getCatalogFromFile(vaultFd, &catalog) == -1) {
+        printf("Error opening input file\n");
+        return -1;
+    };
+    int fatIndex = getFilenameFatIndex(filename, &catalog);
+
+    if (fatIndex == -1) {
+        printf("File not exists in vault\n");
+        close(vaultFd);
+        return -1;
+    }
+    //CREDIT create file: http://pubs.opengroup.org/onlinepubs/009695399/functions/creat.html
+    outFd = creat(filename, catalog.fat[fatIndex].protection);
+    if (outFd < 0) {
+        printf("File could not be created\n");
+        close(vaultFd);
+        return -1;
+    }
+
+    FatItem fatItem = catalog.fat[fatIndex];
+    if (fatItem.dataBlock1Size > 0) {
+        ssize_t sizeNoPadding = fatItem.dataBlock1Size - 2 * DATABLOCK_PADDING;
+        lseek(vaultFd, catalog.fat[fatIndex].dataBlock1Offset + DATABLOCK_PADDING, SEEK_SET);
+        toRead = sizeNoPadding - totalBytesRead > BUFFER ? BUFFER : sizeNoPadding - totalBytesRead;
+        bytesRead = read(vaultFd, outBuffer, (size_t) toRead);
+        if (bytesRead < 0) {
+            printf("Can't read from vault\n");
+            close(vaultFd);
+            close(outFd);
+            return -1;
+        };
+        totalBytesRead += bytesRead;
+        while (totalBytesRead <= sizeNoPadding) {
+            bytesWritten = write(outFd, outBuffer, (size_t) toRead);
+            if (bytesWritten < 0) {
+                printf("Can't write to file\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+            toRead = sizeNoPadding - totalBytesRead > BUFFER ? BUFFER : sizeNoPadding - totalBytesRead;
+            if (toRead == 0) {
+                break;
+            }
+            bytesRead = read(vaultFd, outBuffer, (size_t) toRead);
+            if (bytesRead < 0) {
+                printf("Can't read from vault\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+            totalBytesRead += bytesRead;
+        }
+        delta = sizeNoPadding - totalBytesRead;
+        if (delta > 0) {
+            bytesWritten = write(outFd, outBuffer, (size_t) toRead);
+            if (bytesWritten < 0) {
+                printf("Can't write to file\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+        }
+    }
+
+    if (fatItem.dataBlock2Size > 0) {
+        ssize_t sizeNoPadding = fatItem.dataBlock2Size - 2 * DATABLOCK_PADDING;
+        lseek(vaultFd, catalog.fat[fatIndex].dataBlock2Offset + DATABLOCK_PADDING, SEEK_SET);
+        toRead = sizeNoPadding - totalBytesRead > BUFFER ? BUFFER : sizeNoPadding - totalBytesRead;
+        bytesRead = read(vaultFd, outBuffer, (size_t) toRead);
+        if (bytesRead < 0) {
+            printf("Can't read from vault\n");
+            close(vaultFd);
+            close(outFd);
+            return -1;
+        };
+        totalBytesRead += bytesRead;
+        while (totalBytesRead <= sizeNoPadding) {
+            bytesWritten = write(outFd, outBuffer, (size_t) toRead);
+            if (bytesWritten < 0) {
+                printf("Can't write to file\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+            toRead = sizeNoPadding - totalBytesRead > BUFFER ? BUFFER : sizeNoPadding - totalBytesRead;
+            if (toRead == 0) {
+                break;
+            }
+            bytesRead = read(vaultFd, outBuffer, (size_t) toRead);
+            if (bytesRead < 0) {
+                printf("Can't read from vault\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+            totalBytesRead += bytesRead;
+        }
+        delta = sizeNoPadding - totalBytesRead;
+        if (delta > 0) {
+            bytesWritten = write(outFd, outBuffer, (size_t) toRead);
+            if (bytesWritten < 0) {
+                printf("Can't write to file\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+        }
+    }
+    if (fatItem.dataBlock3Size > 0) {
+        ssize_t sizeNoPadding = fatItem.dataBlock3Size - 2 * DATABLOCK_PADDING;
+        lseek(vaultFd, catalog.fat[fatIndex].dataBlock3Offset + DATABLOCK_PADDING, SEEK_SET);
+        toRead = sizeNoPadding - totalBytesRead > BUFFER ? BUFFER : sizeNoPadding - totalBytesRead;
+        bytesRead = read(vaultFd, outBuffer, (size_t) toRead);
+        if (bytesRead < 0) {
+            printf("Can't read from vault\n");
+            close(vaultFd);
+            close(outFd);
+            return -1;
+        };
+        totalBytesRead += bytesRead;
+        while (totalBytesRead <= sizeNoPadding) {
+            bytesWritten = write(outFd, outBuffer, (size_t) toRead);
+            if (bytesWritten < 0) {
+                printf("Can't write to file\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+            toRead = sizeNoPadding - totalBytesRead > BUFFER ? BUFFER : sizeNoPadding - totalBytesRead;
+            if (toRead == 0) {
+                break;
+            }
+            bytesRead = read(vaultFd, outBuffer, (size_t) toRead);
+            if (bytesRead < 0) {
+                printf("Can't read from vault\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+            totalBytesRead += bytesRead;
+        }
+        delta = sizeNoPadding - totalBytesRead;
+        if (delta > 0) {
+            bytesWritten = write(outFd, outBuffer, (size_t) toRead);
+            if (bytesWritten < 0) {
+                printf("Can't write to file\n");
+                close(vaultFd);
+                close(outFd);
+                return -1;
+            };
+        }
+    }
+    close(vaultFd);
+    close(outFd);
+    return 0;
+
+
+};
+
 
 int main() {
     init("./hello.txt", "1M");
     insertFile("./hello.txt", "./hello2.txt");
-    deleteFile("./hello.txt", "hello2.txt");
-    Catalog catalog1;
-    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
+    fetchFile("./hello.txt", "hello2.txt");
+//    deleteFile("./hello.txt", "hello2.txt");
+//    Catalog catalog1;
+//    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
 }
