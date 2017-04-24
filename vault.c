@@ -771,6 +771,7 @@ int fetchFile(char *vaultName, char *filename) {
             };
         }
     }
+    chmod(filename, catalog.fat[fatIndex].protection);
     close(vaultFd);
     close(outFd);
     return 0;
@@ -875,12 +876,12 @@ int defrag(char *vaultName) {
 int main() {
     init("./hello.txt", "1M");
     insertFile("./hello.txt", "./hello2.txt");
-    insertFile("./hello.txt", "./hello3.txt");
-    insertFile("./hello.txt", "./hello4.txt");
-    deleteFile("./hello.txt", "hello3.txt");
-    defrag("./hello.txt");
+//    insertFile("./hello.txt", "./hello3.txt");
+//    insertFile("./hello.txt", "./hello4.txt");
+//    deleteFile("./hello.txt", "hello3.txt");
+//    defrag("./hello.txt");
 
-//    fetchFile("./hello.txt", "hello2.txt");
+    fetchFile("./hello.txt", "hello2.txt");
 //    Catalog catalog1;
 //    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
 }
