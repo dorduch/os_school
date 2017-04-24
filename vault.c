@@ -246,10 +246,7 @@ int sortFreeDatablocksBySize(const void *a, const void *b) {
     return (retVal);
 }
 
-Datablock *getSortedFreeDatablocks(Catalog catalog) {
-    off_t currentOffset = sizeof(catalog);
-    Datablock *res = (Datablock *) malloc(sizeof(Datablock) * 300);
-//    Datablock res[300];
+Datablock *getDatablocksByOffset(Catalog catalog) {
     Datablock occupiedDatablocks[300];
     int index = 0;
     int i;
@@ -287,6 +284,18 @@ Datablock *getSortedFreeDatablocks(Catalog catalog) {
     }
 
     qsort(occupiedDatablocks, 300, sizeof(Datablock), sortDatablocksByOffset);
+    return occupiedDatablocks;
+}
+
+Datablock *getSortedFreeDatablocks(Catalog catalog) {
+    off_t currentOffset = sizeof(catalog);
+    Datablock *res = (Datablock *) malloc(sizeof(Datablock) * 300);
+//    Datablock res[300];
+//    Datablock occupiedDatablocks[300];
+    int index;
+    int i;
+    Datablock *occupiedDatablocks = getDatablocksByOffset(catalog);
+
     //occupied datablocks array should be sorted by offset (all the free blocks should be last)
     index = 0;
     off_t delta;
@@ -767,12 +776,111 @@ int fetchFile(char *vaultName, char *filename) {
     return 0;
 };
 
+int moveDatablockInFile(int fdIn, int fdOut, ssize_t size, off_t oldOffset, off_t newOffset, off_t offsetDelta) {
+    size_t totalBytesRead = 0;
+    ssize_t bytesRead;
+    ssize_t bytesWritten;
+    ssize_t delta;
+    size_t bytesToRead;
+    char buffer[BUFFER];
+    char junk[DATABLOCK_PADDING];
+
+    lseek(fdIn, oldOffset, SEEK_SET);
+    lseek(fdOut, newOffset, SEEK_SET);
+    bytesToRead = size - totalBytesRead > BUFFER ? BUFFER : size - totalBytesRead;
+    bytesRead = read(fdIn, buffer, bytesToRead);
+    if (bytesRead < 0) {
+        return -1;
+    }
+    totalBytesRead += bytesRead;
+    while (totalBytesRead <= size) {
+        bytesWritten = write(fdOut, buffer, bytesToRead);
+        if (bytesWritten < 0) {
+            return -1;
+        }
+        bytesToRead =
+               size - totalBytesRead > BUFFER ? BUFFER : size - totalBytesRead;
+        bytesRead = read(fdIn, buffer, bytesToRead);
+        if (bytesRead < 0) {
+            return -1;
+        }
+        if (bytesRead == 0) {
+            break;
+        }
+        totalBytesRead += bytesRead;
+    }
+    delta = size - totalBytesRead;
+    if (delta > 0) {
+        bytesWritten = write(fdOut, buffer, (size_t) delta);
+        if (bytesWritten < 0) {
+            return -1;
+        }
+    }
+    // delete arrows
+    if (offsetDelta > size) {
+        deleteBlockFromFile(size, oldOffset, fdOut);
+    } else {
+        lseek(fdOut, oldOffset + size - DATABLOCK_PADDING, SEEK_SET);
+        bytesWritten = write(fdOut, junk, DATABLOCK_PADDING);
+        if (bytesWritten < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int defrag(char *vaultName) {
+    off_t offsetDelta;
+    int i;
+
+    int fdIn = open(vaultName, O_RDONLY);
+    int fdOut = open(vaultName, O_WRONLY);
+    Catalog catalog;
+    if (fdIn < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        return -1;
+    }
+    if (fdOut < 0) {
+        printf("Error opening input file: %s\n", strerror(errno));
+        close(fdIn);
+        return -1;
+    }
+    if (getCatalogFromFile(fdIn, &catalog) == -1) {
+        printf("Error opening input file\n");
+        return -1;
+    };
+    off_t currentOffset = sizeof(catalog)+1;
+    Datablock *occupiedDatablocks = getDatablocksByOffset(catalog);
+    for (i = 0; i < 300; i++) {
+        if (occupiedDatablocks[i].isFree) {
+            break;
+        }
+        Datablock currDatablock = occupiedDatablocks[i];
+        offsetDelta = currDatablock.offset - currentOffset;
+        if (offsetDelta > 1) {
+            if (moveDatablockInFile(fdIn, fdOut, currDatablock.size, currDatablock.offset, currentOffset, offsetDelta) == -1) {
+                printf("Error when writing to file\n");
+                close(fdIn);
+                close(fdOut);
+            }
+        }
+        currentOffset = currDatablock.offset + currDatablock.size + 1;
+    }
+
+    close(fdIn);
+    close(fdOut);
+}
+
 
 int main() {
     init("./hello.txt", "1M");
     insertFile("./hello.txt", "./hello2.txt");
-    fetchFile("./hello.txt", "hello2.txt");
-//    deleteFile("./hello.txt", "hello2.txt");
+    insertFile("./hello.txt", "./hello3.txt");
+    insertFile("./hello.txt", "./hello4.txt");
+    deleteFile("./hello.txt", "hello3.txt");
+    defrag("./hello.txt");
+
+//    fetchFile("./hello.txt", "hello2.txt");
 //    Catalog catalog1;
 //    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
 }
