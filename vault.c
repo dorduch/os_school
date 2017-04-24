@@ -346,12 +346,14 @@ int writeDatablocksToFile(int outputFd, Datablock *datablocksArr, int fileFd, in
         bytesWritten = write(outputFd, DATABLOCK_START, DATABLOCK_PADDING);
         if (bytesWritten < 0) {
             printf("Error when writing to file\n");
+            deleteBlockFromFile(datablocksArr[j].size, datablocksArr[j].offset, outputFd);
             return -1;
         }
 
         bytesRead = read(fileFd, inBuffer, BUFFER);
         if (bytesRead < 0) {
-            printf("Error when writing to file\n");
+            printf("Error when reading from file\n");
+            deleteBlockFromFile(datablocksArr[j].size, datablocksArr[j].offset, outputFd);
             return -1;
         }
         totalBytesRead += bytesRead;
@@ -359,11 +361,13 @@ int writeDatablocksToFile(int outputFd, Datablock *datablocksArr, int fileFd, in
             bytesWritten = write(outputFd, inBuffer, (size_t) bytesRead);
             if (bytesWritten < 0) {
                 printf("Error when writing to file\n");
+                deleteBlockFromFile(datablocksArr[j].size, datablocksArr[j].offset, outputFd);
                 return -1;
             }
             bytesRead = read(fileFd, inBuffer, BUFFER);
             if (bytesRead < 0) {
-                printf("Error when writing to file\n");
+                printf("Error when reading from file\n");
+                deleteBlockFromFile(datablocksArr[j].size, datablocksArr[j].offset, outputFd);
                 return -1;
             }
             if (bytesRead == 0) {
@@ -376,12 +380,14 @@ int writeDatablocksToFile(int outputFd, Datablock *datablocksArr, int fileFd, in
             bytesWritten = write(outputFd, inBuffer, (size_t) delta);
             if (bytesWritten < 0) {
                 printf("Error when writing to file\n");
+                deleteBlockFromFile(datablocksArr[j].size, datablocksArr[j].offset, outputFd);
                 return -1;
             }
         }
         write(outputFd, DATABLOCK_END, DATABLOCK_PADDING);
         if (bytesWritten < 0) {
             printf("Error when writing to file\n");
+            deleteBlockFromFile(datablocksArr[j].size, datablocksArr[j].offset, outputFd);
             return -1;
         }
         lseek(fileFd, datablockSize + 1, SEEK_SET);
