@@ -806,7 +806,7 @@ int moveDatablockInFile(int fdIn, int fdOut, ssize_t size, off_t oldOffset, off_
             return -1;
         }
         bytesToRead =
-               size - totalBytesRead > BUFFER ? BUFFER : size - totalBytesRead;
+                size - totalBytesRead > BUFFER ? BUFFER : size - totalBytesRead;
         bytesRead = read(fdIn, buffer, bytesToRead);
         if (bytesRead < 0) {
             return -1;
@@ -856,7 +856,7 @@ int defrag(char *vaultName) {
         printf("Error opening input file\n");
         return -1;
     };
-    off_t currentOffset = sizeof(catalog)+1;
+    off_t currentOffset = sizeof(catalog) + 1;
     Datablock *occupiedDatablocks = getDatablocksByOffset(catalog);
     for (i = 0; i < 300; i++) {
         if (occupiedDatablocks[i].isFree) {
@@ -865,7 +865,8 @@ int defrag(char *vaultName) {
         Datablock currDatablock = occupiedDatablocks[i];
         offsetDelta = currDatablock.offset - currentOffset;
         if (offsetDelta > 1) {
-            if (moveDatablockInFile(fdIn, fdOut, currDatablock.size, currDatablock.offset, currentOffset, offsetDelta) == -1) {
+            if (moveDatablockInFile(fdIn, fdOut, currDatablock.size, currDatablock.offset, currentOffset,
+                                    offsetDelta) == -1) {
                 printf("Error when writing to file\n");
                 close(fdIn);
                 close(fdOut);
@@ -878,6 +879,49 @@ int defrag(char *vaultName) {
     close(fdOut);
 }
 
+float getDefragRatio(Catalog catalog) {
+    off_t firstOffset;
+    off_t lastOffset;
+    off_t currOffset;
+    off_t delta;
+    off_t totalGapOffsets = 0;
+    Datablock currDatablock;
+    int i;
+    Datablock *datablocks = getDatablocksByOffset(catalog);
+    firstOffset = datablocks[0].isFree ? datablocks[0].offset : -1;
+    currOffset = sizeof(catalog) + 1;
+    for (i = 0; i < 300; i++) {
+        currDatablock = datablocks[i];
+        if (currDatablock.isFree) {
+            break;
+        }
+        delta = currDatablock.offset - currOffset;
+        if (delta > 0) {
+            totalGapOffsets += delta;
+        }
+        currOffset = currDatablock.offset + currDatablock.size + 1;
+    }
+    lastOffset = datablocks[i].isFree ? datablocks[i - 1].offset + datablocks[i - 1].size :  datablocks[i].offset + datablocks[i].size;
+}
+
+int status(char *vaultName) {
+    Catalog catalog;
+
+
+    int vaultFd = open(vaultName, O_RDONLY);
+    if (vaultFd < 0) {
+        printf("Error when opening file\n");
+        return -1;
+    }
+    if (getCatalogFromFile(vaultFd, &catalog) == -1) {
+        printf("Can't get catalog from file\n");
+        close(vaultFd);
+        return -1;
+    }
+
+    getDefragRatio(catalog);
+
+}
 
 int main() {
     init("./hello.txt", "1M");
