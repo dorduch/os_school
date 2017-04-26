@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <ctype.h>
 
 
 const int TEXT_LENGTH = 257;
@@ -54,6 +55,8 @@ typedef struct data_block {
     off_t offset;
     bool isFree;
     ssize_t size;
+    int fatIndex;
+    int blockNum;
 } Datablock;
 
 
@@ -181,7 +184,7 @@ int listFiles(char *filename) {
             char itemSize[1024];
             sizeToString(item.size, itemSize);
             //CREDIT print t_time: https://www.tutorialspoint.com/c_standard_library/c_function_ctime.htm
-            printf("%s\t%s\t%o\t%s\n", item.filename, itemSize, item.protection, ctime(&item.insertionDataStamp));
+            printf("%s\t%s\t%o\t%s", item.filename, itemSize, item.protection, ctime(&item.insertionDataStamp));
         }
     }
 
@@ -257,6 +260,8 @@ Datablock *getDatablocksByOffset(Catalog catalog) {
             datablock.size = catalog.fat[i].dataBlock1Size;
             datablock.offset = catalog.fat[i].dataBlock1Offset;
             datablock.isFree = false;
+            datablock.fatIndex = i;
+            datablock.blockNum = 1;
             occupiedDatablocks[index] = datablock;
             index++;
             if (catalog.fat[i].dataBlock2Size > 0) {
@@ -264,6 +269,8 @@ Datablock *getDatablocksByOffset(Catalog catalog) {
                 datablock2.size = catalog.fat[i].dataBlock2Size;
                 datablock2.isFree = false;
                 datablock2.offset = catalog.fat[i].dataBlock2Offset;
+                datablock.fatIndex = i;
+                datablock.blockNum = 2;
                 occupiedDatablocks[index] = datablock2;
                 index++;
             }
@@ -272,6 +279,8 @@ Datablock *getDatablocksByOffset(Catalog catalog) {
                 datablock3.size = catalog.fat[i].dataBlock3Size;
                 datablock3.isFree = false;
                 datablock3.offset = catalog.fat[i].dataBlock3Offset;
+                datablock.fatIndex = i;
+                datablock.blockNum = 3;
                 occupiedDatablocks[index] = datablock3;
                 index++;
             }
@@ -870,16 +879,30 @@ int defrag(char *vaultName) {
                 printf("Error when writing to file\n");
                 close(fdIn);
                 close(fdOut);
+                return -1;
+            }
+            if (currDatablock.blockNum == 1) {
+                catalog.fat[currDatablock.fatIndex].dataBlock1Offset = currentOffset;
+            } else if (currDatablock.blockNum == 2) {
+                catalog.fat[currDatablock.fatIndex].dataBlock2Offset = currentOffset;
+            } else {
+                catalog.fat[currDatablock.fatIndex].dataBlock3Offset = currentOffset;
             }
         }
         currentOffset = currDatablock.offset + currDatablock.size + 1;
     }
-
+    if (writeCatalogToVault(fdOut, catalog) == -1) {
+        printf("Error when writing to file\n");
+        close(fdIn);
+        close(fdOut);
+        return -1;
+    }
     close(fdIn);
     close(fdOut);
+    return 0;
 }
 
-float getStatusRatio(Catalog catalog) {
+float getFragRatio(Catalog catalog) {
     off_t firstOffset;
     off_t lastOffset;
     off_t currOffset;
@@ -888,9 +911,12 @@ float getStatusRatio(Catalog catalog) {
     Datablock currDatablock;
     int i;
     Datablock *datablocks = getDatablocksByOffset(catalog);
-    firstOffset = datablocks[0].isFree ? datablocks[0].offset : -1;
-    currOffset = sizeof(catalog) + 1;
-    for (i = 0; i < 300; i++) {
+    firstOffset = datablocks[0].isFree ? -1 : datablocks[0].offset;
+    if (firstOffset == -1) {
+        return 0;
+    }
+    currOffset = firstOffset + datablocks[0].size + 1;
+    for (i = 1; i < 300; i++) {
         currDatablock = datablocks[i];
         if (currDatablock.isFree) {
             break;
@@ -901,13 +927,13 @@ float getStatusRatio(Catalog catalog) {
         }
         currOffset = currDatablock.offset + currDatablock.size + 1;
     }
-    lastOffset = datablocks[i].isFree ? datablocks[i - 1].offset + datablocks[i - 1].size :  datablocks[i].offset + datablocks[i].size;
+    lastOffset = datablocks[i].isFree ? datablocks[i - 1].offset + datablocks[i - 1].size - 1 : datablocks[i].offset +
+                                                                                                datablocks[i].size - 1;
+    return ((float) totalGapOffsets / (lastOffset - firstOffset));
 }
 
 int status(char *vaultName) {
     Catalog catalog;
-
-
     int vaultFd = open(vaultName, O_RDONLY);
     if (vaultFd < 0) {
         printf("Error when opening file\n");
@@ -919,19 +945,160 @@ int status(char *vaultName) {
         return -1;
     }
 
-    getStatusRatio(catalog);
+    float fragRatio = getFragRatio(catalog);
+    int numOfFiles = catalog.metadata.numOfFiles;
+    size_t totalSize = 0;
+    for (int i = 0; i < 100; i++) {
+        if (!catalog.fat[i].isEmpty) {
+            totalSize += catalog.fat[i].size;
+        }
+    }
+    char sizeInString[1024];
+    sizeToString(totalSize, sizeInString);
 
-}
+    printf("Number of files:\t%d\nTotal size:\t%s\nFragmentation ratio:\t%.2f\n", numOfFiles, sizeInString, fragRatio);
+};
 
-int main() {
-    init("./hello.txt", "1M");
-    insertFile("./hello.txt", "./hello2.txt");
+int main(int argc, char **argv) {
+
+    char vaultName[256];
+    char instruction[256];
+    struct timeval start, end;
+    long seconds, useconds;
+    double mtime;
+
+
+    if (argc < 3) {
+        printf("Please provide arguments\n");
+        return 0;
+    }
+    strcpy(vaultName, argv[1]);
+    strcpy(instruction, argv[2]);
+    //CREDIT convert string to lowercase: http://stackoverflow.com/questions/2661766/c-convert-a-mixed-case-string-to-all-lower-case
+    for (int i = 0; instruction[i]; i++) {
+        instruction[i] = tolower(instruction[i]);
+    }
+
+
+    if (strcmp(instruction, "init") == 0) {
+        if (argc < 4) {
+            printf("Not enough arguments for instruction\n");
+        }
+        char size[256];
+        strcpy(size, argv[3]);
+
+        gettimeofday(&start, NULL);
+
+        int res = init(vaultName, size);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    if (strcmp(instruction, "list") == 0) {
+
+        gettimeofday(&start, NULL);
+
+        int res = listFiles(vaultName);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    if (strcmp(instruction, "add") == 0) {
+        if (argc < 4) {
+            printf("Not enough arguments for instruction\n");
+        }
+        char path[256];
+        strcpy(path, argv[3]);
+
+        gettimeofday(&start, NULL);
+
+        int res = insertFile(vaultName, path);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    if (strcmp(instruction, "rm") == 0) {
+        if (argc < 4) {
+            printf("Not enough arguments for instruction\n");
+        }
+        char fileName[256];
+        strcpy(fileName, argv[3]);
+
+        gettimeofday(&start, NULL);
+
+        int res = deleteFile(vaultName, fileName);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    if (strcmp(instruction, "fetch") == 0) {
+        if (argc < 4) {
+            printf("Not enough arguments for instruction\n");
+        }
+        char fileName[256];
+        strcpy(fileName, argv[3]);
+
+        gettimeofday(&start, NULL);
+
+        int res = fetchFile(vaultName, fileName);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    if (strcmp(instruction, "defrag") == 0) {
+
+        gettimeofday(&start, NULL);
+
+        int res = defrag(vaultName);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    if (strcmp(instruction, "status") == 0) {
+
+        gettimeofday(&start, NULL);
+
+        int res = status(vaultName);
+
+        gettimeofday(&end, NULL);
+        mtime = ((seconds) * 1000 + useconds / 1000.0);
+        printf("Elapsed time: %.3f milliseconds\n", mtime);
+        return 0;
+    }
+
+    printf("Invalid instruction\n");
+    return -1;
+//
+//
+//    init("./hello.txt", "1M");
+//    insertFile("./hello.txt", "./hello2.txt");
 //    insertFile("./hello.txt", "./hello3.txt");
 //    insertFile("./hello.txt", "./hello4.txt");
+//    listFiles("./hello.txt");
+//    status("./hello.txt");
 //    deleteFile("./hello.txt", "hello3.txt");
+//    status("./hello.txt");
 //    defrag("./hello.txt");
-
-    fetchFile("./hello.txt", "hello2.txt");
+//    status("./hello.txt");
+//    fetchFile("./hello.txt", "hello2.txt");
 //    Catalog catalog1;
 //    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
 }
