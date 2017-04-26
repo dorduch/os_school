@@ -16,11 +16,11 @@
 #include <ctype.h>
 
 
-const int TEXT_LENGTH = 257;
-const char *DATABLOCK_START = "<<<<<<<<";
-const char *DATABLOCK_END = ">>>>>>>>";
-const int DATABLOCK_PADDING = 8;
-const int BUFFER = 4 * 1024;
+#define TEXT_LENGTH 257
+#define DATABLOCK_START "<<<<<<<<"
+#define DATABLOCK_END ">>>>>>>>"
+#define DATABLOCK_PADDING 8
+#define BUFFER 4 * 1024
 #define _FILE_OFFSET_BITS 64
 
 
@@ -91,7 +91,8 @@ int init(char *filename, char *sizeString) {
 
     Catalog catalog;
     catalog.metadata = metadata;
-    for (int i = 0; i < 100; i++) {
+    int i;
+    for (i = 0; i < 100; i++) {
         FatItem fatItem;
         fatItem.isEmpty = true;
         catalog.fat[i] = fatItem;
@@ -178,7 +179,8 @@ int listFiles(char *filename) {
         close(fdIn);
         return -1;
     };
-    for (int i = 0; i < 100; i++) {
+    int i;
+    for (i = 0; i < 100; i++) {
         FatItem item = catalog.fat[i];
         if (!item.isEmpty) {
             char itemSize[1024];
@@ -207,16 +209,19 @@ off_t getFileSize(const char *filename) {
 }
 
 //CREDIT get file permissions: http://stackoverflow.com/questions/20238042/is-there-a-c-function-to-get-permissions-of-a-file
-mode_t getFilePermissions(const char *filename) {
+int getFilePermissions(const char *filename, mode_t* mode) {
     struct stat st;
 
-    if (stat(filename, &st) == 0)
-        return st.st_mode;
+    if (stat(filename, &st) == 0){
+        *mode = st.st_mode;
+        return 0;
+    }
+
 
     fprintf(stderr, "Cannot determine permissions of %s: %s\n",
             filename, strerror(errno));
 
-    return NULL;
+    return -1;
 }
 
 int sortDatablocksByOffset(const void *a, const void *b) {
@@ -250,7 +255,7 @@ int sortFreeDatablocksBySize(const void *a, const void *b) {
 }
 
 Datablock *getDatablocksByOffset(Catalog catalog) {
-    Datablock occupiedDatablocks[300];
+    Datablock* occupiedDatablocks = (Datablock*)malloc(sizeof(Datablock) * 300);
     int index = 0;
     int i;
     // filling occupied datablocks array
@@ -342,10 +347,30 @@ Datablock *getSortedFreeDatablocks(Catalog catalog) {
     return res;
 }
 
+int deleteBlockFromFile(ssize_t size, off_t offset, int fd) {
+    char writeBuffer[8];
+    ssize_t bytesWritten;
+    lseek(fd, offset, SEEK_SET);
+    bytesWritten = write(fd, writeBuffer, 8);
+    if (bytesWritten < 0) {
+        printf("Can't delete block from vault\n");
+        return -1;
+    }
+    lseek(fd, size - 16, SEEK_CUR);
+    bytesWritten = write(fd, writeBuffer, 8);
+    if (bytesWritten < 0) {
+        printf("Can't delete block from vault\n");
+        return -1;
+    }
+    return 0;
+};
+
+
 int writeDatablocksToFile(int outputFd, Datablock *datablocksArr, int fileFd, int numOfBlocks, size_t fileSize) {
     //fd should be file descriptor that is able to overwrite
     char inBuffer[BUFFER];
-    for (int j = 0; j < numOfBlocks; j++) {
+    int j;
+    for (j = 0; j < numOfBlocks; j++) {
         ssize_t totalBytesRead = 0;
         ssize_t bytesWritten;
         ssize_t delta;
@@ -444,18 +469,17 @@ int insertFile(char *vaultName, char *filePath) {
     }
 
     off_t fileSize = getFileSize(filePath);
-    mode_t filePermissions = getFilePermissions(filePath);
+    mode_t filePermissions;
+    if(getFilePermissions(filePath, &filePermissions) == -1) {
+        close(fileFd);
+        close(vaultFd);
+        return -1;
+    }
     if (fileSize == 0) {
         printf("File is empty\n");
         close(fileFd);
         close(vaultFd);
         return 0;
-    }
-
-    if (filePermissions == NULL) {
-        close(fileFd);
-        close(vaultFd);
-        return -1;
     }
     Datablock *freeDatablocks = getSortedFreeDatablocks(catalog);
     int numOfBlocks = 0;
@@ -529,8 +553,8 @@ int insertFile(char *vaultName, char *filePath) {
 
 int getFilenameFatIndex(const char *filename, Catalog *catalog) {
     int fatIndex = -1;
-
-    for (int i = 0; i < 100; i++) {
+    int i;
+    for (i = 0; i < 100; i++) {
         if (strcmp((*catalog).fat[i].filename, filename) == 0) {
             fatIndex = i;
             break;
@@ -538,24 +562,6 @@ int getFilenameFatIndex(const char *filename, Catalog *catalog) {
     }
     return fatIndex;
 }
-
-int deleteBlockFromFile(ssize_t size, off_t offset, int fd) {
-    char writeBuffer[8];
-    ssize_t bytesWritten;
-    lseek(fd, offset, SEEK_SET);
-    bytesWritten = write(fd, writeBuffer, 8);
-    if (bytesWritten < 0) {
-        printf("Can't delete block from vault\n");
-        return -1;
-    }
-    lseek(fd, size - 16, SEEK_CUR);
-    bytesWritten = write(fd, writeBuffer, 8);
-    if (bytesWritten < 0) {
-        printf("Can't delete block from vault\n");
-        return -1;
-    }
-    return 0;
-};
 
 int deleteFile(char *vaultName, char *filename) {
     struct timeval timestamp;
@@ -948,7 +954,8 @@ int status(char *vaultName) {
     float fragRatio = getFragRatio(catalog);
     int numOfFiles = catalog.metadata.numOfFiles;
     size_t totalSize = 0;
-    for (int i = 0; i < 100; i++) {
+    int i;
+    for (i = 0; i < 100; i++) {
         if (!catalog.fat[i].isEmpty) {
             totalSize += catalog.fat[i].size;
         }
@@ -957,6 +964,7 @@ int status(char *vaultName) {
     sizeToString(totalSize, sizeInString);
 
     printf("Number of files:\t%d\nTotal size:\t%s\nFragmentation ratio:\t%.2f\n", numOfFiles, sizeInString, fragRatio);
+    return 0;
 };
 
 int main(int argc, char **argv) {
@@ -975,7 +983,8 @@ int main(int argc, char **argv) {
     strcpy(vaultName, argv[1]);
     strcpy(instruction, argv[2]);
     //CREDIT convert string to lowercase: http://stackoverflow.com/questions/2661766/c-convert-a-mixed-case-string-to-all-lower-case
-    for (int i = 0; instruction[i]; i++) {
+    int i;
+    for (i = 0; instruction[i]; i++) {
         instruction[i] = tolower(instruction[i]);
     }
 
