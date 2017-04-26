@@ -879,7 +879,7 @@ int defrag(char *vaultName) {
     close(fdOut);
 }
 
-float getDefragRatio(Catalog catalog) {
+float getStatusRatio(Catalog catalog) {
     off_t firstOffset;
     off_t lastOffset;
     off_t currOffset;
@@ -919,7 +919,7 @@ int status(char *vaultName) {
         return -1;
     }
 
-    getDefragRatio(catalog);
+    getStatusRatio(catalog);
 
 }
 
