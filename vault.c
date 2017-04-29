@@ -186,7 +186,7 @@ int listFiles(char *filename) {
             char itemSize[1024];
             sizeToString(item.size, itemSize);
             //CREDIT print t_time: https://www.tutorialspoint.com/c_standard_library/c_function_ctime.htm
-            printf("%s\t%s\t%o\t%s", item.filename, itemSize, item.protection, ctime(&item.insertionDataStamp));
+            printf("%s\t%s\t%o\t%s", item.filename, itemSize, item.protection%(8*8*8), ctime(&item.insertionDataStamp));
         }
     }
 
@@ -256,6 +256,10 @@ int sortFreeDatablocksBySize(const void *a, const void *b) {
 
 Datablock *getDatablocksByOffset(Catalog catalog) {
     Datablock* occupiedDatablocks = (Datablock*)malloc(sizeof(Datablock) * 300);
+    if (occupiedDatablocks == NULL) {
+        printf("Error when allocating memory to array");
+        return occupiedDatablocks;
+    }
     int index = 0;
     int i;
     // filling occupied datablocks array
@@ -304,8 +308,10 @@ Datablock *getDatablocksByOffset(Catalog catalog) {
 Datablock *getSortedFreeDatablocks(Catalog catalog) {
     off_t currentOffset = sizeof(catalog);
     Datablock *res = (Datablock *) malloc(sizeof(Datablock) * 300);
-//    Datablock res[300];
-//    Datablock occupiedDatablocks[300];
+    if (res == NULL) {
+        printf("Error when allocating memory to array");
+        return res;
+    }
     int index;
     int i;
     Datablock *occupiedDatablocks = getDatablocksByOffset(catalog);
@@ -344,6 +350,7 @@ Datablock *getSortedFreeDatablocks(Catalog catalog) {
         res[i] = datablock;
     }
     qsort(res, 300, sizeof(Datablock), sortFreeDatablocksBySize);
+    free(occupiedDatablocks);
     return res;
 }
 
@@ -493,6 +500,7 @@ int insertFile(char *vaultName, char *filePath) {
                (freeDatablocks[0].size + freeDatablocks[1].size + freeDatablocks[2].size + 6 * DATABLOCK_PADDING)) {
         numOfBlocks = 3;
     } else {
+        free(freeDatablocks);
         printf("Not enough free space to insert file\n");
         close(fileFd);
         close(vaultFd);
@@ -533,12 +541,14 @@ int insertFile(char *vaultName, char *filePath) {
 
 
     if (writeDatablocksToFile(vaultFd, freeDatablocks, fileFd, numOfBlocks, (size_t) fileSize) == -1) {
+        free(freeDatablocks);
         close(fileFd);
         close(vaultFd);
         return -1;
     };
 
     if (writeCatalogToVault(vaultFd, catalog) == -1) {
+        free(freeDatablocks);
         close(fileFd);
         close(vaultFd);
         return -1;
@@ -555,7 +565,7 @@ int getFilenameFatIndex(const char *filename, Catalog *catalog) {
     int fatIndex = -1;
     int i;
     for (i = 0; i < 100; i++) {
-        if (strcmp((*catalog).fat[i].filename, filename) == 0) {
+        if (!(*catalog).fat[i].isEmpty && strcmp((*catalog).fat[i].filename, filename) == 0) {
             fatIndex = i;
             break;
         }
@@ -883,6 +893,7 @@ int defrag(char *vaultName) {
             if (moveDatablockInFile(fdIn, fdOut, currDatablock.size, currDatablock.offset, currentOffset,
                                     offsetDelta) == -1) {
                 printf("Error when writing to file\n");
+                free(occupiedDatablocks);
                 close(fdIn);
                 close(fdOut);
                 return -1;
@@ -899,10 +910,12 @@ int defrag(char *vaultName) {
     }
     if (writeCatalogToVault(fdOut, catalog) == -1) {
         printf("Error when writing to file\n");
+        free(occupiedDatablocks);
         close(fdIn);
         close(fdOut);
         return -1;
     }
+    free(occupiedDatablocks);
     close(fdIn);
     close(fdOut);
     return 0;
@@ -919,6 +932,7 @@ float getFragRatio(Catalog catalog) {
     Datablock *datablocks = getDatablocksByOffset(catalog);
     firstOffset = datablocks[0].isFree ? -1 : datablocks[0].offset;
     if (firstOffset == -1) {
+        free(datablocks);
         return 0;
     }
     currOffset = firstOffset + datablocks[0].size + 1;
@@ -935,6 +949,7 @@ float getFragRatio(Catalog catalog) {
     }
     lastOffset = datablocks[i].isFree ? datablocks[i - 1].offset + datablocks[i - 1].size - 1 : datablocks[i].offset +
                                                                                                 datablocks[i].size - 1;
+    free(datablocks);
     return ((float) totalGapOffsets / (lastOffset - firstOffset));
 }
 
@@ -1001,6 +1016,8 @@ int main(int argc, char **argv) {
         int res = init(vaultName, size);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1013,6 +1030,8 @@ int main(int argc, char **argv) {
         int res = listFiles(vaultName);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1030,6 +1049,8 @@ int main(int argc, char **argv) {
         int res = insertFile(vaultName, path);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1047,6 +1068,8 @@ int main(int argc, char **argv) {
         int res = deleteFile(vaultName, fileName);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1064,6 +1087,8 @@ int main(int argc, char **argv) {
         int res = fetchFile(vaultName, fileName);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1076,6 +1101,8 @@ int main(int argc, char **argv) {
         int res = defrag(vaultName);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1088,6 +1115,8 @@ int main(int argc, char **argv) {
         int res = status(vaultName);
 
         gettimeofday(&end, NULL);
+        seconds  = end.tv_sec  - start.tv_sec;
+        useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
         return 0;
@@ -1095,19 +1124,4 @@ int main(int argc, char **argv) {
 
     printf("Invalid instruction\n");
     return -1;
-//
-//
-//    init("./hello.txt", "1M");
-//    insertFile("./hello.txt", "./hello2.txt");
-//    insertFile("./hello.txt", "./hello3.txt");
-//    insertFile("./hello.txt", "./hello4.txt");
-//    listFiles("./hello.txt");
-//    status("./hello.txt");
-//    deleteFile("./hello.txt", "hello3.txt");
-//    status("./hello.txt");
-//    defrag("./hello.txt");
-//    status("./hello.txt");
-//    fetchFile("./hello.txt", "hello2.txt");
-//    Catalog catalog1;
-//    getCatalogFromFile(open("./hello.txt", O_RDONLY), &catalog1);
 }
