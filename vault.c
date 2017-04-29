@@ -68,13 +68,13 @@ int init(char *filename, char *sizeString) {
     size_t dataAmountSizeBytes;
 
     if (dataAmountSizeSuffix == 'b' || dataAmountSizeSuffix == 'B') {
-        dataAmountSizeBytes = (size_t) dataAmountSize;
+        dataAmountSizeBytes = ((size_t) dataAmountSize);
     } else if (dataAmountSizeSuffix == 'k' || dataAmountSizeSuffix == 'K') {
-        dataAmountSizeBytes = (size_t) dataAmountSize * 1024;
+        dataAmountSizeBytes = ((size_t) dataAmountSize) * 1024;
     } else if (dataAmountSizeSuffix == 'm' || dataAmountSizeSuffix == 'M') {
-        dataAmountSizeBytes = (size_t) dataAmountSize * 1024 * 1204;
+        dataAmountSizeBytes = ((size_t) dataAmountSize) * 1024 * 1204;
     } else if (dataAmountSizeSuffix == 'g' || dataAmountSizeSuffix == 'G') {
-        dataAmountSizeBytes = (size_t) dataAmountSize * 1204 * 1024 * 1204;
+        dataAmountSizeBytes = ((size_t) dataAmountSize) * 1204 * 1024 * 1204;
     } else {
         printf("Not valid data amount:%c\n", dataAmountSizeSuffix);
         return -1;
@@ -103,25 +103,17 @@ int init(char *filename, char *sizeString) {
         return -1;
     } else {
         int fdOut = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
-        ssize_t bytesWritten = write(fdOut, &catalog, sizeof(catalog));
-        ssize_t totalBytesWritten;
-        if (bytesWritten < 0) {
+        if (write(fdOut, &catalog, sizeof(catalog)) < 0) {
             close(fdOut);
             printf("Error when writing to file\n");
             return -1;
         }
-        totalBytesWritten = bytesWritten;
-        char junkArray[BUFFER];
-        while (totalBytesWritten < dataAmountSizeBytes) {
-            size_t delta = dataAmountSizeBytes - totalBytesWritten;
-            size_t bytesToWrite = delta > BUFFER ? BUFFER : delta;
-            bytesWritten = write(fdOut, &junkArray, bytesToWrite);
-            if (bytesWritten < 0) {
-                close(fdOut);
-                printf("Error when writing to file\n");
-                return -1;
-            }
-            totalBytesWritten += bytesWritten;
+        //CREDIT - recitation
+        lseek(fdOut, (off_t) dataAmountSizeBytes - 1, SEEK_SET);
+        if (write(fdOut, "", 1) < 0) {
+            close(fdOut);
+            printf("Error when writing to file\n");
+            return -1;
         }
         close(fdOut);
     }
@@ -186,7 +178,8 @@ int listFiles(char *filename) {
             char itemSize[1024];
             sizeToString(item.size, itemSize);
             //CREDIT print t_time: https://www.tutorialspoint.com/c_standard_library/c_function_ctime.htm
-            printf("%s\t%s\t%o\t%s", item.filename, itemSize, item.protection%(8*8*8), ctime(&item.insertionDataStamp));
+            printf("%s\t%s\t%o\t%s", item.filename, itemSize, item.protection % (8 * 8 * 8),
+                   ctime(&item.insertionDataStamp));
         }
     }
 
@@ -209,10 +202,10 @@ off_t getFileSize(const char *filename) {
 }
 
 //CREDIT get file permissions: http://stackoverflow.com/questions/20238042/is-there-a-c-function-to-get-permissions-of-a-file
-int getFilePermissions(const char *filename, mode_t* mode) {
+int getFilePermissions(const char *filename, mode_t *mode) {
     struct stat st;
 
-    if (stat(filename, &st) == 0){
+    if (stat(filename, &st) == 0) {
         *mode = st.st_mode;
         return 0;
     }
@@ -255,7 +248,7 @@ int sortFreeDatablocksBySize(const void *a, const void *b) {
 }
 
 Datablock *getDatablocksByOffset(Catalog catalog) {
-    Datablock* occupiedDatablocks = (Datablock*)malloc(sizeof(Datablock) * 300);
+    Datablock *occupiedDatablocks = (Datablock *) malloc(sizeof(Datablock) * 300);
     if (occupiedDatablocks == NULL) {
         printf("Error when allocating memory to array");
         return occupiedDatablocks;
@@ -477,7 +470,7 @@ int insertFile(char *vaultName, char *filePath) {
 
     off_t fileSize = getFileSize(filePath);
     mode_t filePermissions;
-    if(getFilePermissions(filePath, &filePermissions) == -1) {
+    if (getFilePermissions(filePath, &filePermissions) == -1) {
         close(fileFd);
         close(vaultFd);
         return -1;
@@ -1016,7 +1009,7 @@ int main(int argc, char **argv) {
         int res = init(vaultName, size);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
@@ -1030,7 +1023,7 @@ int main(int argc, char **argv) {
         int res = listFiles(vaultName);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
@@ -1049,7 +1042,7 @@ int main(int argc, char **argv) {
         int res = insertFile(vaultName, path);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
@@ -1068,7 +1061,7 @@ int main(int argc, char **argv) {
         int res = deleteFile(vaultName, fileName);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
@@ -1087,7 +1080,7 @@ int main(int argc, char **argv) {
         int res = fetchFile(vaultName, fileName);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
@@ -1101,7 +1094,7 @@ int main(int argc, char **argv) {
         int res = defrag(vaultName);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
@@ -1115,7 +1108,7 @@ int main(int argc, char **argv) {
         int res = status(vaultName);
 
         gettimeofday(&end, NULL);
-        seconds  = end.tv_sec  - start.tv_sec;
+        seconds = end.tv_sec - start.tv_sec;
         useconds = end.tv_usec - start.tv_usec;
         mtime = ((seconds) * 1000 + useconds / 1000.0);
         printf("Elapsed time: %.3f milliseconds\n", mtime);
