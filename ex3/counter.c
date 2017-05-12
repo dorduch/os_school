@@ -30,8 +30,8 @@ int main(int argc, char **argv) {
         printf("Error mmapping the file: %s\n", strerror(errno));
         return -1;
     }
-
-    for (size_t i = 0; i < length; i++) {
+    size_t i;
+    for (i = 0; i < length; i++) {
         if (arr[i] == targetChar) {
             cnt++;
         }

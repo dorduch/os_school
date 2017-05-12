@@ -93,7 +93,8 @@ int main(int argc, char **argv) {
         }
     }
     else {
-        for (int i = 0; i < m; i++) {
+        int i;
+        for (i = 0; i < m; i++) {
             pid = fork();
             if (pid < 0) {
                 printf("fork failed: %s\n", strerror(errno));
