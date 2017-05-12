@@ -1,14 +1,13 @@
-#include <sys/stat.h>
-#include <stdio.h>
-#include <memory.h>
-#include <errno.h>
-#include <math.h>
-#include <signal.h>
 #include <unistd.h>
-#include <sys/wait.h>
+#include <errno.h>
+#include <memory.h>
+#include <printf.h>
+#include <sys/param.h>
+#include <signal.h>
+#include <math.h>
+#include <sys/stat.h>
 #include <fcntl.h>
-#include <stdbool.h>
-
+#include <sys/wait.h>
 
 //CREDIT hw2
 off_t getFileSize(const char *filename) {
@@ -49,13 +48,13 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
 
 
 int main(int argc, char **argv) {
+
     char fileName[256];
     pid_t pid;
     if (argc < 3) {
         printf("No enough arguments");
         return -1;
     }
-    char targetChar = argv[1][0];
     strcpy(fileName, argv[2]);
     size_t fileSize = (size_t) getFileSize(fileName);
     double tmpM = sqrt(fileSize);
@@ -74,23 +73,26 @@ int main(int argc, char **argv) {
     off_t offset = 0;
     if (m < 1024) {
         pid = fork();
+        printf("%d", pid);
         if (pid < 0) {
             printf("fork failed: %s\n", strerror(errno));
             return -1;
         }
         if (pid == 0) {
             printf("in fork!!!!");
-            char *args[5];
+            char *args[6];
             args[0] = "./counter";
             args[1] = argv[1];
             args[2] = argv[2];
             sprintf(args[3], "%lld", offset);
             sprintf(args[4], "%zu", fileSize);
+            args[5] = NULL;
             execv("./counter", args);
             printf("execv failed: %s\n", strerror(errno));
             return -1;
         }
-    } else {
+    }
+    else {
         for (int i = 0; i < m; i++) {
             pid = fork();
             if (pid < 0) {
