@@ -1,7 +1,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <memory.h>
-#include <printf.h>
+#include <stdio.h>
 #include <sys/param.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
             args[0] = "./counter";
             args[1] = argv[1];
             args[2] = argv[2];
-            sprintf(offsetStr, "%lld", offset);
+            sprintf(offsetStr, "%jd", offset);
             args[3] = offsetStr;
             sprintf(sizeStr, "%zu", fileSize);
             args[4] = sizeStr;
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
                 args[0] = "./counter";
                 args[1] = argv[1];
                 args[2] = argv[2];
-                sprintf(offsetStr, "%lld", offset);
+                sprintf(offsetStr, "%jd", offset);
                 args[3] = offsetStr;
                 sprintf(sizeStr, "%zu", m);
                 args[4] = sizeStr;
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
                 args[0] = "./counter";
                 args[1] = argv[1];
                 args[2] = argv[2];
-                sprintf(offsetStr, "%lld", offset);
+                sprintf(offsetStr, "%jd", offset);
                 args[3] = offsetStr;
                 sprintf(sizeStr, "%zu", delta);
                 args[4] = sizeStr;
