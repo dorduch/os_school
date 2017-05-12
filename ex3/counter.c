@@ -10,9 +10,8 @@
 
 
 int main(int argc, char **argv) {
-    printf("args: %s, %s, %s, %s\n", argv[1], argv[2], argv[3], argv[4]);
     if (argc != 5) {
-        printf("Invalid args2");
+        printf("Invalid args");
         return -1;
     }
     size_t cnt = 0;
@@ -24,6 +23,10 @@ int main(int argc, char **argv) {
     sscanf(argv[3], "%jd", &offset);
     size_t length;
     sscanf(argv[4], "%zu", &length);
+    if (length == 0) {
+        printf("empty file\n");
+        exit(0);
+    }
     int fd = open(fileName, O_RDONLY);
     lseek(fd, offset, SEEK_SET);
     // CREDIT mmap: recitation 5
@@ -42,12 +45,9 @@ int main(int argc, char **argv) {
     pid_t myPid = getpid();
     sprintf(pipeName, "%s%d", pipeName, myPid);
     mkfifo(pipeName, 0666);
-    printf("%s\n", pipeName);
-    int outFd = open(pipeName, O_WRONLY);
-    printf("after open\n");
-    printf("%s: %d:\n", pipeName, outFd);
     pid_t dispatcherPid = getppid();
     kill(dispatcherPid, SIGUSR1);
+    int outFd = open(pipeName, O_WRONLY);
     write(outFd, &cnt, sizeof(cnt));
     sleep(1);
     if (munmap(arr, length) == -1) {

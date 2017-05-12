@@ -25,25 +25,47 @@ off_t getFileSize(const char *filename) {
 size_t res = 0;
 
 void signalHandler(int signum, siginfo_t *info, void *ptr) {
-    printf("signal handler!");
     pid_t pid = info->si_pid;
-    char buffer[1024];
-    char *pipeName = "/tmp/counter_";
-    pipeName += sprintf(pipeName, "%d", pid);
-//    strcat(pipeName, pid);
+    size_t toAdd;
+    char pipeName[256] = "/tmp/counter_";
+    sprintf(pipeName, "%s%d", pipeName, pid);
     int fd = open(pipeName, O_RDONLY);
     if (fd < 0) {
         printf("Error opening pipe: %s\n", strerror(errno));
         return;
     }
-    ssize_t readBytes = read(fd, buffer, 1024);
+    ssize_t readBytes = read(fd, &toAdd, sizeof(size_t));
     if (readBytes < 0) {
         printf("cannot read from pipe: %s\n", strerror(errno));
         return;
     }
-    size_t toAdd = (size_t) buffer;
     res += toAdd;
 
+}
+
+pid_t forkLogic(char* targetChar, char* fileName, off_t offset, size_t length) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        printf("fork failed: %s\n", strerror(errno));
+        return -1;
+    }
+    if (pid == 0) {
+        char *args[6];
+        char offsetStr[1024];
+        char sizeStr[1024];
+        args[0] = "./counter";
+        args[1] = targetChar;
+        args[2] = fileName;
+        sprintf(offsetStr, "%jd", offset);
+        args[3] = offsetStr;
+        sprintf(sizeStr, "%zu", length);
+        args[4] = sizeStr;
+        args[5] = NULL;
+        execv("./counter", args);
+        printf("execv failed: %s\n", strerror(errno));
+        return -1;
+    }
+    return pid;
 }
 
 
@@ -71,78 +93,21 @@ int main(int argc, char **argv) {
         return -1;
     }
     off_t offset = 0;
-    if (m < 1024) {
-        pid = fork();
-        printf("%d\n", pid);
-        if (pid < 0) {
-            printf("fork failed: %s\n", strerror(errno));
-            return -1;
-        }
-        if (pid == 0) {
-            char *args[6];
-            char offsetStr[1024];
-            char sizeStr[1024];
-            args[0] = "./counter";
-            args[1] = argv[1];
-            args[2] = argv[2];
-            sprintf(offsetStr, "%jd", offset);
-            args[3] = offsetStr;
-            sprintf(sizeStr, "%zu", fileSize);
-            args[4] = sizeStr;
-            args[5] = NULL;
-            execv("./counter", args);
-            printf("execv failed: %s\n", strerror(errno));
-            return -1;
-        }
+    if (m < 0) {
+        forkLogic(argv[1], argv[2], offset, fileSize);
     }
     else {
         int i;
+        m = 2;
+        size_t chunkSize = (size_t) floor(fileSize/m);
         for (i = 0; i < m; i++) {
-            pid = fork();
-            if (pid < 0) {
-                printf("fork failed: %s\n", strerror(errno));
-                return -1;
-            }
-            if (pid == 0) {
-                char *args[6];
-                char offsetStr[1024];
-                char sizeStr[1024];
-                args[0] = "./counter";
-                args[1] = argv[1];
-                args[2] = argv[2];
-                sprintf(offsetStr, "%jd", offset);
-                args[3] = offsetStr;
-                sprintf(sizeStr, "%zu", m);
-                args[4] = sizeStr;
-                args[5] = NULL;
-                execv("./counter", args);
-                printf("execv failed: %s\n", strerror(errno));
-                return -1;
-            }
+            printf("%d\n", i);
+            forkLogic(argv[1], argv[2], offset, chunkSize);
+            offset += chunkSize;
         }
         if (offset < fileSize) {
             size_t delta = fileSize - offset;
-            pid = fork();
-            if (pid < 0) {
-                printf("fork failed: %s\n", strerror(errno));
-                return -1;
-            }
-            if (pid == 0) {
-                char *args[6];
-                char offsetStr[1024];
-                char sizeStr[1024];
-                args[0] = "./counter";
-                args[1] = argv[1];
-                args[2] = argv[2];
-                sprintf(offsetStr, "%jd", offset);
-                args[3] = offsetStr;
-                sprintf(sizeStr, "%zu", delta);
-                args[4] = sizeStr;
-                args[5] = NULL;
-                execv("./counter", args);
-                printf("execv failed: %s\n", strerror(errno));
-                return -1;
-            }
+            forkLogic(argv[1], argv[2], offset, delta);
         }
     }
     int status;
