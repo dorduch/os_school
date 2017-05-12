@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 
     pid_t myPid = getpid();
 //    strcat(pipeName, myPid);
-    pipeName += sprintf(pipeName, "%ld", myPid);
+    pipeName += sprintf(pipeName, "%d", myPid);
     mkfifo(pipeName, 0666);
     int outFd = open(pipeName, 0444);
     pid_t dispatcherPid = getppid();

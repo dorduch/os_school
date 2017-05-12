@@ -30,7 +30,7 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
     pid_t pid = info->si_pid;
     char buffer[1024];
     char *pipeName = "/tmp/counter_";
-    pipeName += sprintf(pipeName, "%ld", pid);
+    pipeName += sprintf(pipeName, "%d", pid);
 //    strcat(pipeName, pid);
     int fd = open(pipeName, O_RDONLY);
     if (fd < 0) {
@@ -79,7 +79,6 @@ int main(int argc, char **argv) {
             return -1;
         }
         if (pid == 0) {
-            wait(30);
             printf("in fork!!!!");
             char *args[5];
             args[0] = "./counter";
