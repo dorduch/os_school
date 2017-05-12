@@ -4,10 +4,10 @@
 #include <printf.h>
 #include <sys/param.h>
 #include <signal.h>
-#include <math.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/wait.h>
+#include <math.h>
+#include <fcntl.h>
 
 //CREDIT hw2
 off_t getFileSize(const char *filename) {
@@ -22,7 +22,7 @@ off_t getFileSize(const char *filename) {
     return -1;
 }
 
-size_t result = 0;
+size_t res = 0;
 
 void signalHandler(int signum, siginfo_t *info, void *ptr) {
     printf("signal handler!");
@@ -42,7 +42,7 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
         return;
     }
     size_t toAdd = (size_t) buffer;
-    result += toAdd;
+    res += toAdd;
 
 }
 
@@ -73,19 +73,22 @@ int main(int argc, char **argv) {
     off_t offset = 0;
     if (m < 1024) {
         pid = fork();
-        printf("%d", pid);
+        printf("%d\n", pid);
         if (pid < 0) {
             printf("fork failed: %s\n", strerror(errno));
             return -1;
         }
         if (pid == 0) {
-            printf("in fork!!!!");
             char *args[6];
+            char offsetStr[1024];
+            char sizeStr[1024];
             args[0] = "./counter";
             args[1] = argv[1];
             args[2] = argv[2];
-            sprintf(args[3], "%lld", offset);
-            sprintf(args[4], "%zu", fileSize);
+            sprintf(offsetStr, "%lld", offset);
+            args[3] = offsetStr;
+            sprintf(sizeStr, "%zu", fileSize);
+            args[4] = sizeStr;
             args[5] = NULL;
             execv("./counter", args);
             printf("execv failed: %s\n", strerror(errno));
@@ -101,13 +104,17 @@ int main(int argc, char **argv) {
                 return -1;
             }
             if (pid == 0) {
-                char *args[5];
+                char *args[6];
+                char offsetStr[1024];
+                char sizeStr[1024];
                 args[0] = "./counter";
                 args[1] = argv[1];
                 args[2] = argv[2];
-                sprintf(args[3], "%lld", offset);
-                sprintf(args[4], "%zu", m);
-                offset += m;
+                sprintf(offsetStr, "%lld", offset);
+                args[3] = offsetStr;
+                sprintf(sizeStr, "%zu", m);
+                args[4] = sizeStr;
+                args[5] = NULL;
                 execv("./counter", args);
                 printf("execv failed: %s\n", strerror(errno));
                 return -1;
@@ -121,12 +128,17 @@ int main(int argc, char **argv) {
                 return -1;
             }
             if (pid == 0) {
-                char *args[5];
+                char *args[6];
+                char offsetStr[1024];
+                char sizeStr[1024];
                 args[0] = "./counter";
                 args[1] = argv[1];
                 args[2] = argv[2];
-                sprintf(args[3], "%lld", offset);
-                sprintf(args[4], "%zu", delta);
+                sprintf(offsetStr, "%lld", offset);
+                args[3] = offsetStr;
+                sprintf(sizeStr, "%zu", delta);
+                args[4] = sizeStr;
+                args[5] = NULL;
                 execv("./counter", args);
                 printf("execv failed: %s\n", strerror(errno));
                 return -1;
@@ -135,7 +147,7 @@ int main(int argc, char **argv) {
     }
     int status;
     while (wait(&status) != -1);
-    printf("result: %zu\n", result);
+    printf("result: %zu\n", res);
     return 0;
 
 }
