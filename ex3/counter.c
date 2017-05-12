@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     char pipeName[256] = "/tmp/counter_";
     strcpy(fileName, argv[2]);
     off_t offset;
-    sscanf(argv[3], "%lld", &offset);
+    sscanf(argv[3], "%jd", &offset);
     size_t length;
     sscanf(argv[4], "%zu", &length);
     int fd = open(fileName, O_RDONLY);
