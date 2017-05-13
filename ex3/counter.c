@@ -12,7 +12,7 @@
 int main(int argc, char **argv)
 {
     bool finished = false;
-    if (argc != 6)
+    if (argc != 5)
     {
         printf("Invalid args\n");
         return -1;
@@ -26,15 +26,12 @@ int main(int argc, char **argv)
     sscanf(argv[3], "%jd", &offset);
     size_t length;
     sscanf(argv[4], "%zu", &length);
-    int forkNum;
-    sscanf(argv[5], "%d", &forkNum);
     if (length == 0)
     {
         printf("empty file\n");
         exit(0);
     }
     int fd = open(fileName, O_RDONLY);
-    //    lseek(fd, offset, SEEK_SET);
 
     // CREDIT mmap: recitation 5
     char *arr = (char *)mmap(NULL, length, PROT_READ, MAP_SHARED, fd, offset);
@@ -57,14 +54,11 @@ int main(int argc, char **argv)
     mkfifo(pipeName, 0666);
     void signalHandler(int signum, siginfo_t *info, void *ptr)
     {
-        printf("%d: Got OK\n", myPid);
         pid_t pid = info->si_pid;
         if (pid != 0)
         {
             int outFd = open(pipeName, O_WRONLY);
-            printf("%d: before write\n", myPid);
             write(outFd, &cnt, sizeof(cnt));
-            printf("%d: after write\n", myPid);
             sleep(1);
             if (munmap(arr, length) == -1)
             {
@@ -75,7 +69,6 @@ int main(int argc, char **argv)
             close(outFd);
             unlink(pipeName);
             finished = true;
-            printf("%d: exiting handler\n", myPid);            
             exit(0);
         }
         return;

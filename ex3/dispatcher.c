@@ -13,13 +13,10 @@
 off_t getFileSize(const char *filename)
 {
     struct stat st;
-
     if (stat(filename, &st) == 0)
         return st.st_size;
-
     fprintf(stderr, "Cannot determine size of %s: %s\n",
             filename, strerror(errno));
-
     return -1;
 }
 
@@ -39,7 +36,6 @@ pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length, i
         char *args[7];
         char offsetStr[1024];
         char sizeStr[1024];
-        char numOfForksStr[1024];
         args[0] = "./counter";
         args[1] = targetChar;
         args[2] = fileName;
@@ -47,13 +43,11 @@ pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length, i
         args[3] = offsetStr;
         sprintf(sizeStr, "%zu", length);
         args[4] = sizeStr;
-        args[5] = numOfForksStr;
-        args[6] = NULL;
+        args[5] = NULL;
         execv("./counter", args);
         printf("execv failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("%d fork opened\n", pid);
     return pid;
 }
 
@@ -96,7 +90,6 @@ int main(int argc, char **argv)
         sprintf(pipeName, "%s%d", pipeName, pid);
         if (pid != 0)
         {
-            printf("got sig from fork %d\n", pid);
             int k;
             for (k = 0; k < pidIndex; k++)
             {
@@ -108,7 +101,6 @@ int main(int argc, char **argv)
             pidArr[pidIndex] = pid;
             pidIndex++;
             kill(pid, SIGUSR2);
-            printf("sent OK to fork %d\n", pid);
             int fd = open(pipeName, O_RDONLY);
             if (fd < 0)
             {
@@ -161,9 +153,7 @@ int main(int argc, char **argv)
     for (j = 0; j < numOfForks; j++)
     {
         wait(NULL);
-        printf("finished fork %d\n", j);
     }
-    // while (wait(&status) != -1);
     printf("result: %zu\n", res);
     return 0;
 }
