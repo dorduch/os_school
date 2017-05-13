@@ -66,7 +66,15 @@ int main(int argc, char **argv) {
     return -1;
   }
   strcpy(fileName, argv[2]);
-  size_t fileSize = (size_t)getFileSize(fileName);
+  off_t fileSizeOffset = getFileSize(fileName);
+  if (fileSizeOffset == -1) {
+    return -1;
+  }
+  if (fileSizeOffset == 0) {
+    printf("File is empty\n");
+    return 0;
+  }
+  size_t fileSize = (size_t)fileSizeOffset;
   double tmpM = sqrt(fileSize);
   size_t m = (size_t)floor(tmpM);
   pid_t pidArr[16];
