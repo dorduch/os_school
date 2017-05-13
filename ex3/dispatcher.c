@@ -23,12 +23,14 @@ off_t getFileSize(const char *filename) {
 }
 
 size_t res = 0;
+int numOfForks = 1;
 
 void signalHandler(int signum, siginfo_t *info, void *ptr) {
     pid_t pid = info->si_pid;
     size_t toAdd;
     char pipeName[256] = "/tmp/counter_";
     sprintf(pipeName, "%s%d", pipeName, pid);
+    printf("dispatcher : opened pipe: %d\n", pid);
     int fd = open(pipeName, O_RDONLY);
     if (fd < 0) {
         printf("Error opening pipe: %s\n", strerror(errno));
@@ -40,10 +42,10 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
         return;
     }
     res += toAdd;
-
+    printf("Exiting handler\n");
 }
 
-pid_t forkLogic(char* targetChar, char* fileName, off_t offset, size_t length) {
+pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length, int numOfForks) {
     pid_t pid = fork();
     if (pid < 0) {
         printf("fork failed: %s\n", strerror(errno));
@@ -53,14 +55,19 @@ pid_t forkLogic(char* targetChar, char* fileName, off_t offset, size_t length) {
         char *args[6];
         char offsetStr[1024];
         char sizeStr[1024];
+        char numOfForksStr[1024];
         args[0] = "./counter";
         args[1] = targetChar;
         args[2] = fileName;
         sprintf(offsetStr, "%jd", offset);
         args[3] = offsetStr;
+        printf("offset: %s\n", args[3]);
         sprintf(sizeStr, "%zu", length);
         args[4] = sizeStr;
-        args[5] = NULL;
+        sprintf(numOfForksStr, "%d", numOfForks);
+        printf("num of forks: %s\n", numOfForksStr);
+        args[5] = numOfForksStr;
+        args[6] = NULL;
         execv("./counter", args);
         printf("execv failed: %s\n", strerror(errno));
         return -1;
@@ -68,17 +75,32 @@ pid_t forkLogic(char* targetChar, char* fileName, off_t offset, size_t length) {
     return pid;
 }
 
+off_t getPageSizeOffset(off_t originalOffset) {
+    off_t tmpOffset = originalOffset;
+    off_t pageSizeOffset = getpagesize();
+    printf("pageSize: %lld\n", pageSizeOffset);
+    printf("originalOffset: %lld\n", originalOffset);
+    off_t res = pageSizeOffset;
+    int i = 1;
+
+    while (tmpOffset > pageSizeOffset) {
+        res = pageSizeOffset;
+        pageSizeOffset = pageSizeOffset * i;
+    }
+    return res;
+};
+
 
 int main(int argc, char **argv) {
 
     char fileName[256];
-    pid_t pid;
     if (argc < 3) {
         printf("No enough arguments");
         return -1;
     }
     strcpy(fileName, argv[2]);
     size_t fileSize = (size_t) getFileSize(fileName);
+    printf("file size: %zu\n", fileSize);
     double tmpM = sqrt(fileSize);
     size_t m = (size_t) floor(tmpM);
 
@@ -94,20 +116,21 @@ int main(int argc, char **argv) {
     }
     off_t offset = 0;
     if (m < 0) {
-        forkLogic(argv[1], argv[2], offset, fileSize);
-    }
-    else {
-        int i;
-        m = 2;
-        size_t chunkSize = (size_t) floor(fileSize/m);
-        for (i = 0; i < m; i++) {
-            printf("%d\n", i);
-            forkLogic(argv[1], argv[2], offset, chunkSize);
+        forkLogic(argv[1], argv[2], offset, fileSize, 1);
+    } else {
+//        int i;
+//        m = 2;
+        size_t chunkSize = (size_t) getPageSizeOffset((off_t) floor(fileSize / m));
+        printf("Chunk size: %zu\n", chunkSize);
+//        for (i = 0; i < m; i++) {
+        while (offset < fileSize) {
+            forkLogic(argv[1], argv[2], offset, chunkSize, numOfForks);
+            numOfForks ++;
             offset += chunkSize;
         }
         if (offset < fileSize) {
             size_t delta = fileSize - offset;
-            forkLogic(argv[1], argv[2], offset, delta);
+            forkLogic(argv[1], argv[2], offset, delta, numOfForks);
         }
     }
     int status;
