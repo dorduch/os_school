@@ -7,9 +7,11 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 int main(int argc, char **argv)
 {
+    bool finished = false;
     if (argc != 6)
     {
         printf("Invalid args\n");
@@ -53,18 +55,48 @@ int main(int argc, char **argv)
     pid_t myPid = getpid();
     sprintf(pipeName, "%s%d", pipeName, myPid);
     mkfifo(pipeName, 0666);
-    pid_t dispatcherPid = getppid();
-    kill(dispatcherPid, SIGUSR1);
-    int outFd = open(pipeName, O_WRONLY);
-    write(outFd, &cnt, sizeof(cnt));
-    sleep(1);
-    if (munmap(arr, length) == -1)
+    void signalHandler(int signum, siginfo_t *info, void *ptr)
     {
-        printf("Error un-mmapping the file: %s\n", strerror(errno));
+        printf("%d: Got OK\n", myPid);
+        pid_t pid = info->si_pid;
+        if (pid != 0)
+        {
+            int outFd = open(pipeName, O_WRONLY);
+            printf("%d: before write\n", myPid);
+            write(outFd, &cnt, sizeof(cnt));
+            printf("%d: after write\n", myPid);
+            sleep(1);
+            if (munmap(arr, length) == -1)
+            {
+                printf("Error un-mmapping the file: %s\n", strerror(errno));
+                exit(0);
+            }
+            close(fd);
+            close(outFd);
+            unlink(pipeName);
+            finished = true;
+            printf("%d: exiting handler\n", myPid);            
+            exit(0);
+        }
+        return;
+    }
+    struct sigaction new_action;
+    memset(&new_action, 0, sizeof(new_action));
+    new_action.sa_sigaction = signalHandler;
+    new_action.sa_flags = SA_SIGINFO;
+    if (0 != sigaction(SIGUSR2, &new_action, NULL))
+    {
+        printf("Signal handle registration "
+               "failed. %s\n",
+               strerror(errno));
         return -1;
     }
-    close(fd);
-    close(outFd);
-    unlink(pipeName);
+
+    pid_t dispatcherPid = getppid();
+
+    while (!finished)
+    {
+        int killStat = kill(dispatcherPid, SIGUSR1);
+    }
     exit(0);
 }
