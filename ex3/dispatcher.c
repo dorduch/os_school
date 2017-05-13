@@ -34,6 +34,7 @@ void signalHandler(int signum, siginfo_t *info, void *ptr)
     sprintf(pipeName, "%s%d", pipeName, pid);
     if (pid != 0)
     {
+        printf("inside\n");
         int fd = open(pipeName, O_RDONLY);
         if (fd < 0)
         {
@@ -64,6 +65,7 @@ pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length, i
         char *args[7];
         char offsetStr[1024];
         char sizeStr[1024];
+        char numOfForksStr[1024];
         args[0] = "./counter";
         args[1] = targetChar;
         args[2] = fileName;
@@ -71,8 +73,8 @@ pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length, i
         args[3] = offsetStr;
         sprintf(sizeStr, "%zu", length);
         args[4] = sizeStr;
-        args[5] = NULL;
-        sleep(numOfForks * 5);
+        args[5] = numOfForksStr;
+        args[6] = NULL;
         execv("./counter", args);
         printf("execv failed: %s\n", strerror(errno));
         return -1;
@@ -86,7 +88,6 @@ off_t getPageSizeOffset(off_t originalOffset)
     off_t pageSizeOffset = getpagesize();
     off_t res = pageSizeOffset;
     int i = 1;
-
     while (tmpOffset > pageSizeOffset)
     {
         res = pageSizeOffset;
@@ -124,14 +125,12 @@ int main(int argc, char **argv)
     off_t offset = 0;
     if (m < 0)
     {
-        forkLogic(argv[1], argv[2], offset, fileSize, 0);
+        forkLogic(argv[1], argv[2], offset, fileSize, 1);
     }
     else
     {
-        //        int i;
-        //        m = 2;
         size_t chunkSize = (size_t)getPageSizeOffset((off_t)floor(fileSize / m));
-        //        for (i = 0; i < m; i++) {
+        printf("%zu\n", chunkSize);
         while (offset < fileSize)
         {
             forkLogic(argv[1], argv[2], offset, chunkSize, numOfForks);
@@ -146,9 +145,11 @@ int main(int argc, char **argv)
     }
     int status;
     int j;
+    printf("opened %d forks\n", numOfForks);
     for (j = 0; j < numOfForks; j++)
     {
         wait(NULL);
+        printf("finished fork %d\n", j);
     }
     // while (wait(&status) != -1);
     printf("result: %zu\n", res);

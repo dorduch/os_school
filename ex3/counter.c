@@ -10,7 +10,7 @@
 
 int main(int argc, char **argv)
 {
-    if (argc != 5)
+    if (argc != 6)
     {
         printf("Invalid args\n");
         return -1;
@@ -24,6 +24,8 @@ int main(int argc, char **argv)
     sscanf(argv[3], "%jd", &offset);
     size_t length;
     sscanf(argv[4], "%zu", &length);
+    int forkNum;
+    sscanf(argv[5], "%d", &forkNum);
     if (length == 0)
     {
         printf("empty file\n");
@@ -55,7 +57,7 @@ int main(int argc, char **argv)
     kill(dispatcherPid, SIGUSR1);
     int outFd = open(pipeName, O_WRONLY);
     write(outFd, &cnt, sizeof(cnt));
-    sleep(3);
+    sleep(1);
     if (munmap(arr, length) == -1)
     {
         printf("Error un-mmapping the file: %s\n", strerror(errno));
