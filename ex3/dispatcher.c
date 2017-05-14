@@ -47,14 +47,19 @@ pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length,
   return pid;
 }
 
-off_t getPageSizeOffset(off_t originalOffset) {
-  off_t tmpOffset = originalOffset;
-  off_t pageSizeOffset = getpagesize();
-  off_t res = pageSizeOffset;
+size_t getPageSizeOffset(size_t fileSize) {
+  size_t tmpSize = fileSize;
+  size_t pageSizeOffset = getpagesize();
+  size_t res = pageSizeOffset;
+  if (fileSize < (2 * pageSizeOffset)) {
+    while (res < fileSize) {
+      res += pageSizeOffset;
+    }
+    return res;
+  }
   int i = 1;
-  while (tmpOffset > pageSizeOffset) {
-    res = pageSizeOffset;
-    pageSizeOffset = pageSizeOffset * i;
+  while (tmpSize / 16 > res) {
+    res += pageSizeOffset;
   }
   return res;
 };
@@ -76,7 +81,6 @@ int main(int argc, char **argv) {
   }
   size_t fileSize = (size_t)fileSizeOffset;
   double tmpM = sqrt(fileSize);
-  size_t m = (size_t)floor(tmpM);
   pid_t pidArr[16];
   int pidIndex = 0;
   // CREDIT: register signal handler - Appendix A
@@ -123,19 +127,15 @@ int main(int argc, char **argv) {
     return -1;
   }
   off_t offset = 0;
-  if (m < 0) {
-    forkLogic(argv[1], argv[2], offset, fileSize, 1);
-  } else {
-    size_t chunkSize = (size_t)getPageSizeOffset((off_t)floor(fileSize / m));
-    while (offset < fileSize) {
-      forkLogic(argv[1], argv[2], offset, chunkSize, numOfForks);
-      numOfForks++;
-      offset += chunkSize;
-    }
-    if (offset < fileSize) {
-      size_t delta = fileSize - offset;
-      forkLogic(argv[1], argv[2], offset, delta, numOfForks);
-    }
+  size_t chunkSize = getPageSizeOffset(fileSize);
+  while (offset < fileSize) {
+    forkLogic(argv[1], argv[2], offset, chunkSize, numOfForks);
+    numOfForks++;
+    offset += chunkSize;
+  }
+  if (offset < fileSize) {
+    size_t delta = fileSize - offset;
+    forkLogic(argv[1], argv[2], offset, delta, numOfForks);
   }
   int j;
   for (j = 0; j < numOfForks; j++) {
