@@ -21,15 +21,14 @@ int numOfForks = 1;
 pid_t pidArr[16];
 int pidIndex = 0;
 
-pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length,
-                int numOfForks) {
+pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length) {
     pid_t pid = fork();
     if (pid < 0) {
         printf("fork failed: %s\n", strerror(errno));
         return -1;
     }
     if (pid == 0) {
-        char *args[7];
+        char *args[6];
         char offsetStr[1024];
         char sizeStr[1024];
         args[0] = "./counter";
@@ -72,8 +71,10 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
         ssize_t readBytes = read(fd, &toAdd, sizeof(size_t));
         if (readBytes < 0) {
             printf("cannot read from pipe: %s\n", strerror(errno));
+            close(fd);
             return;
         }
+        close(fd);
         res += toAdd;
     }
     return;
@@ -125,13 +126,13 @@ int main(int argc, char **argv) {
     off_t offset = 0;
     size_t chunkSize = getPageSizeOffset(fileSize);
     while (offset < fileSize) {
-        forkLogic(argv[1], argv[2], offset, chunkSize, numOfForks);
+        forkLogic(argv[1], argv[2], offset, chunkSize);
         numOfForks++;
         offset += chunkSize;
     }
     if (offset < fileSize) {
         size_t delta = fileSize - offset;
-        forkLogic(argv[1], argv[2], offset, delta, numOfForks);
+        forkLogic(argv[1], argv[2], offset, delta);
     }
     int j;
     for (j = 0; j < numOfForks; j++) {
