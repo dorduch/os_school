@@ -92,7 +92,6 @@ size_t getPageSizeOffset(size_t fileSize) {
         res += pageSize;
     }
 
-    printf("%zu\n", fileSize / res);
     return res;
 };
 
