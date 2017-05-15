@@ -80,7 +80,6 @@ int main(int argc, char **argv) {
 
     while (!finished) {
         int killStat = kill(dispatcherPid, SIGUSR1);
-        sleep(1);
     }
     exit(0);
 }
