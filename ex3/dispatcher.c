@@ -49,6 +49,7 @@ pid_t forkLogic(char *targetChar, char *fileName, off_t offset, size_t length,
 
 
 void signalHandler(int signum, siginfo_t *info, void *ptr) {
+    // CREDIT: register signal handler - Appendix A
     pid_t pid = info->si_pid;
     size_t toAdd;
     char pipeName[256] = "/tmp/counter_";
@@ -111,10 +112,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     size_t fileSize = (size_t) fileSizeOffset;
-
-    // CREDIT: register signal handler - Appendix A
-
-
     struct sigaction new_action;
     memset(&new_action, 0, sizeof(new_action));
     new_action.sa_sigaction = signalHandler;
