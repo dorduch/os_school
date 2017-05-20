@@ -29,6 +29,10 @@ int main(int argc, char **argv) {
     exit(0);
   }
   int fd = open(fileName, O_RDONLY);
+  if (fd < 0) {
+    printf("Error opening file to read: %s\n", strerror(errno));
+    return -1;
+  }
 
   // CREDIT mmap: recitation 5
   char *arr = (char *)mmap(NULL, length, PROT_READ, MAP_SHARED, fd, offset);
@@ -46,16 +50,23 @@ int main(int argc, char **argv) {
 
   pid_t myPid = getpid();
   sprintf(pipeName, "%s%d", pipeName, myPid);
-  mkfifo(pipeName, 0666);
+  if (mkfifo(pipeName, 0666) == -1) {
+    printf("Error when trying to mkfifo: %s\n", strerror(errno));
+    return -1;
+  }
   void signalHandler(int signum, siginfo_t *info, void *ptr) {
     pid_t pid = info->si_pid;
     if (pid != 0) {
       int outFd = open(pipeName, O_WRONLY);
+      if (outFd < 0) {
+        printf("Error opening pipe to write: %s\n", strerror(errno));
+        return;
+      }
       write(outFd, &cnt, sizeof(cnt));
       sleep(1);
       if (munmap(arr, length) == -1) {
         printf("Error un-mmapping the file: %s\n", strerror(errno));
-        exit(0);
+        exit(-1);
       }
       close(outFd);
       unlink(pipeName);
@@ -79,7 +90,14 @@ int main(int argc, char **argv) {
   pid_t dispatcherPid = getppid();
 
   while (!finished) {
-    int killStat = kill(dispatcherPid, SIGUSR1);
+    if (kill(dispatcherPid, SIGUSR1) == -1) {
+      printf(
+          "Error while trying to send signal from counter to dispatcher, "
+          "killing counter %d: %s\n",
+          myPid, strerror(errno));
+      unlink(pipeName);
+      return -1;
+    }
   }
   exit(0);
 }
