@@ -84,7 +84,11 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
 }
 
 size_t getPageSizeOffset(size_t fileSize) {
-    size_t pageSize = (size_t) getpagesize();
+    size_t pageSize = getpagesize();
+    if (pageSize <= 0) {
+        printf("Error when trying to get system page size: %s\n", strerror(errno));
+        return -1;
+    }
     size_t res = pageSize;
     if (fileSize < (2 * pageSize)) {
         while (res < fileSize) {
@@ -129,14 +133,17 @@ int main(int argc, char **argv) {
     }
     off_t offset = 0;
     size_t chunkSize = getPageSizeOffset(fileSize);
+    if (chunkSize == -1) {
+        return -1;
+    }
     while (offset < fileSize) {
         size_t tmpChunkSize = chunkSize;
         if (offset + chunkSize > fileSize) {
             tmpChunkSize = fileSize - offset;
         }
         if (forkLogic(argv[1], argv[2], offset, tmpChunkSize) == -1) {
-            printf("Error while trying to fork: %s\n", strerror(errno));
             forkError = true;
+            printf("Error while trying to fork: %s\n", strerror(errno));
         } else {
             numOfForks++;
         }
