@@ -1,4 +1,0 @@
-/Users/dor/ClionProjects/os_school/cmake-build-default/CMakeFiles/rebuild_cache.dir
-/Users/dor/ClionProjects/os_school/cmake-build-default/CMakeFiles/edit_cache.dir
-/Users/dor/ClionProjects/os_school/cmake-build-default/CMakeFiles/dispatcher.dir
-/Users/dor/ClionProjects/os_school/cmake-build-default/CMakeFiles/counter.dir
