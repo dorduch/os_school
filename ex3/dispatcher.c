@@ -146,6 +146,6 @@ int main(int argc, char **argv) {
     printf(
         "Due to error in some of the forks, the result may not be accurate\n");
   }
-  printf("result: %zu\n", res);
+  printf("char %s appears %zu times\n", argv[1], res);
   return 0;
 }

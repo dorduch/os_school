@@ -1,0 +1,30 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/dor/ClionProjects/os_school/ex3/dispatcher.c
+errno.h
+-
+fcntl.h
+-
+math.h
+-
+memory.h
+-
+signal.h
+-
+stdio.h
+-
+sys/param.h
+-
+sys/stat.h
+-
+sys/wait.h
+-
+unistd.h
+-
+
