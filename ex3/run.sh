@@ -1,5 +1,5 @@
 #!/bin/bash
 gcc -o dispatcher dispatcher.c -lm
 gcc -o counter counter.c
-./dispatcher a ./a.txt
-# ./dispatcher a ./b.txt
+./dispatcher t ./test.txt
+#./dispatcher a ./a.txt

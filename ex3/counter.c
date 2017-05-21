@@ -23,14 +23,20 @@ void signalHandler(int signum, siginfo_t *info, void *ptr) {
             printf("Error opening pipe to write: %s\n", strerror(errno));
             return;
         }
-        write(outFd, &cnt, sizeof(cnt));
+        if (write(outFd, &cnt, sizeof(cnt)) < 0) {
+            printf("Error writing to pipe: %s\n", strerror(errno));
+            exit(-1);
+        }
         sleep(1);
         if (munmap(arr, length) == -1) {
             printf("Error un-mmapping the file: %s\n", strerror(errno));
             exit(-1);
         }
         close(outFd);
-        unlink(pipeName);
+        if (unlink(pipeName) == -1) {
+            printf("Error un-linking the pipe: %s\n", strerror(errno));
+            exit(-1);
+        }
         finished = true;
         exit(0);
     }
