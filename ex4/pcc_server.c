@@ -23,16 +23,34 @@ int totalBytesRead = 0;
 pthread_mutex_t count_mutex;
 bool infiniteLoop = true;
 int numOfThreads = 0;
+int listenfd = -1;
 
 void signalHandler(int signum, siginfo_t *info, void *ptr) {
+    int i;
     infiniteLoop = false;
+    if (close(listenfd) == -1) {
+        printf("\n Error while closing fd %s \n", strerror(errno));
+    };
+    while(numOfThreads > 0) {
+        sleep(1);
+    }
+    printf("total bytes: %d\n", totalBytesRead);
+    for (i = 0; i<95; i++) {
+        printf("%c: %d\n", i+32, stat[i]);
+    }
+    exit(0);
 }
 
 
 
 void *threadLogic(void *t) {
+    int socketFd = (int) t;
+
+    if (socketFd < 0) {
+        printf("\n Error : Accept Failed. %s \n", strerror(errno));
+        exit(1);
+    }
     __sync_fetch_and_add(&numOfThreads, 1);
-    numOfThreads ++;
     int localStat[95];
     size_t printable = 0;
     int i;
@@ -40,7 +58,6 @@ void *threadLogic(void *t) {
         localStat[i] = 0;
     }
     char buffer[1024];
-    int socketFd = (int) t;
     size_t len;
     if (read(socketFd, &len, sizeof(len)) == -1) {
         printf("\n Error : read from socket %s \n", strerror(errno));
@@ -115,7 +132,6 @@ int main(int argc, char **argv) {
     }
 
 
-    int listenfd = -1;
     int connfd = -1;
 
     struct sockaddr_in serv_addr;
@@ -152,28 +168,15 @@ int main(int argc, char **argv) {
         // but we want to print the client socket details
         connfd = accept(listenfd, (struct sockaddr *) &peer_addr, &addrsize);
 
-        if (connfd < 0) {
-            printf("\n Error : Accept Failed. %s \n", strerror(errno));
-            exit(1);
+        if (connfd > 0) {
+            pthread_t thread;
+            printf("Main: creating thread\n");
+            rc = pthread_create( &thread, NULL, threadLogic, (void*) connfd);
+            if (rc) {
+                printf("ERROR in pthread_create(): %s\n", strerror(rc));
+                exit(1);
+            }
         }
+    }
 
-        pthread_t thread;
-        printf("Main: creating thread\n");
-        rc = pthread_create( &thread, NULL, threadLogic, (void*) connfd);
-        if (rc) {
-            printf("ERROR in pthread_create(): %s\n", strerror(rc));
-            exit( 1 );
-        }
-    }
-    printf("before\n");
-    if (close(listenfd) == -1) {
-        printf("\n Error while closing fd %s \n", strerror(errno));
-    };
-    while(numOfThreads > 0) {
-        sleep(1);
-    }
-    printf("total bytes: %d\n", totalBytesRead);
-    for (i = 0; i<95; i++) {
-        printf("%c: %d\n", i+32, stat[i]);
-    }
 }
