@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
 
     memset(&serv_addr, '0', sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(10000); // Note: htons for endiannes
-    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // hardcoded...
+    serv_addr.sin_port = htons(2233);
+    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     printf("Client: connecting...\n");
     if (connect(socketFd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
@@ -55,6 +55,15 @@ int main(int argc, char **argv) {
         };
         return 1;
     }
+
+    if (write(socketFd, &len, sizeof(len)) == -1) {
+        printf("\n Error : cant write to socket %s \n", strerror(errno));
+        if (close(socketFd) == -1) {
+            printf("\n Error while closing fd %s \n", strerror(errno));
+        };
+        return 1;
+    }
+
     int outFd = open("/dev/urandom", O_RDONLY);
     if (outFd < 0) {
         printf("\n Error : can't open /dev/urandom. %s \n", strerror(errno));
