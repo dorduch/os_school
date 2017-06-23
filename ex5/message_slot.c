@@ -7,53 +7,48 @@
 #define MODULE /* Not a permanent part, though. */
 
 /* ***** Example w/ minimal error handling - for ease of reading ***** */
-
+#include "message_slot.h"
 #include <asm/uaccess.h>  /* for get_user and put_user */
 #include <linux/fs.h>     /* for register_chrdev */
 #include <linux/kernel.h> /* We're doing kernel work */
 #include <linux/module.h> /* Specifically, a module */
 #include <linux/string.h> /* for memset. NOTE - not string.h!*/
+#include <linux/slab.h>
+
 
 MODULE_LICENSE("GPL");
 
-#define SUCCESS 0
-#define DEVICE_RANGE_NAME "message_slot"
-#define BUF_LEN 80
-#define DEVICE_FILE_NAME "message_slot"
 
 struct chardev_info {
   spinlock_t lock;
 };
 
-struct message_slot {
-  char **channels;
-};
-
+typedef struct message_slot {
+  char channels[128][4];
+} message_slot;
+typedef struct message_slot_list_node message_slot_list_node;
 struct message_slot_list_node {
   message_slot *message_slot1;
   message_slot_list_node *next;
-  //   message_slot_list_node *prev;
-  char *id;
+  int id;
   int current_index;
 };
 
-static struct message_slot_list_node first_node;
-static int dev_open_flag =
-    0; /* used to prevent concurent access into the same device */
+static message_slot_list_node first_node;
+static int dev_open_flag = 0;
 static struct chardev_info device_info;
-static char Message[BUF_LEN]; /* The message the device will give when asked */
-static int major;             /* device major number */
+static int major; /* device major number */
 
 /***************** char device functions *********************/
 
 /* process attempts to open the device file */
 static int device_open(struct inode *inode, struct file *file) {
   unsigned long flags;  // for spinlock
+  message_slot_list_node current_list_node;
+  message_slot_list_node next_list_node;
+  current_list_node = first_node;
   printk("device_open(%p)\n", file);
 
-  /*
-   * We don't want to talk to two processes at the same time
-   */
   spin_lock_irqsave(&device_info.lock, flags);
   if (dev_open_flag) {
     spin_unlock_irqrestore(&device_info.lock, flags);
@@ -61,28 +56,26 @@ static int device_open(struct inode *inode, struct file *file) {
   }
 
   dev_open_flag++;
-  struct message_slot_list_node *current_list_node = first_node;
-  while (current_list_node->next != NULL &&
-         strcmp(current_list_node->id, file->f_inode->i_ino) != 0) {
-    current_list_node = current_list_node->next;
+  while (current_list_node.next != NULL && current_list_node.id != file->f_inode->i_ino) {
+    current_list_node = *(current_list_node.next);
   }
-  if (strcmp(current_list_node->id, file->f_inode->i_ino) != 0)) {
-      // current is good
+  if (current_list_node.id != file->f_inode->i_ino) {
+      printk("creating message slot for file\n");    
+      current_list_node.next =
+          (message_slot_list_node *)kmalloc(sizeof(message_slot_list_node), GFP_KERNEL);
+      if (!current_list_node.next == NULL) {
+        printk("error when allocating message_slot_list_node\n");
+      }
+      next_list_node = *(current_list_node.next);
+      next_list_node.id = file->f_inode->i_ino;
+      next_list_node.next = NULL;
+      current_list_node.next = &next_list_node;
+      next_list_node.message_slot1 =
+          (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
+      next_list_node.current_index = 0;
+    } else {
+      printk("message slot exists for file\n");
     }
-  else {
-    current_list_node->next =
-        (message_slot_list_node *)kmalloc(sizeof(message_slot_list_node));
-    current_list_node = current_list_node->next;
-    current_list_node->id = file->f_inode->i_ino;
-    current_list_node->next = NULL;
-    current_list_node->message_slot1 =
-        (*message_slot)kmalloc(sizeof(message_slot));
-    message_slot message_slot1 = current_list_node->message_slot1;
-    int i;
-    for (i = 0; i < 4; i++) {
-      message_slot1[i] = (char *)kmalloc(128);
-    }
-  }
 
   spin_unlock_irqrestore(&device_info.lock, flags);
 
@@ -121,18 +114,17 @@ static long device_ioctl(                      // struct inode*  inode,
     struct file *file, unsigned int ioctl_num, /* The number of the ioctl */
     unsigned long ioctl_param)                 /* The parameter to it */
 {
-
   /* Switch according to the ioctl called */
   if (IOCTL_SET_ENC == ioctl_num) {
-      int index = (int)*ioctl_param;
-      if (index < 0 || index > 3) {
-            // todo bom
-          return -1;
-      }
+    int index = (int)*ioctl_param;
+    if (index < 0 || index > 3) {
+      // todo bom
+      return -1;
+    }
 
     /* Get the parameter given to ioctl by the process */
     if (ioctl_param < 0 ||)
-    printk("chardev, ioctl: setting encryption flag to %ld\n", ioctl_param);
+      printk("chardev, ioctl: setting encryption flag to %ld\n", ioctl_param);
     encryption_flag = ioctl_param;
   }
 
@@ -174,24 +166,25 @@ static int __init init(void) {
   spin_lock_init(&device_info.lock);
 
   /* Register a character device. Get newly assigned major num */
-  major = register_chrdev(0, DEVICE_RANGE_NAME,
-                          &Fops /* our own file operations struct */);
+  major =
+      register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &Fops);  // todo check error
 
   /*
    * Negative values signify an error
    */
   if (major < 0) {
     printk(KERN_ALERT "%s failed with %d\n",
-           "Sorry, registering the character device ", major);
+           "Sorry, registering the character device ", MAJOR_NUM);
     return major;
   }
   first_node.next = NULL;
-  //   first_node.prev = NULL;
-  first_node.message_slot = NULL;
-  printk("Registeration is a success. The major device number is %d.\n", major);
+  first_node.message_slot1 = NULL;
+  first_node.id = -1;
+  printk("Registeration is a success. The major device number is %d.\n",
+         MAJOR_NUM);
   printk("If you want to talk to the device driver,\n");
   printk("you have to create a device file:\n");
-  printk("mknod /dev/%s c %d 0\n", DEVICE_FILE_NAME, major);
+  printk("mknod /dev/%s c %d 0\n", DEVICE_FILE_NAME, MAJOR_NUM);
   printk("You can echo/cat to/from the device file.\n");
   printk("Dont forget to rm the device file and rmmod when you're done\n");
 
@@ -206,6 +199,13 @@ static void __exit cleanup(void) {
    */
 
   // free them all
+  struct message_slot_list_node current_list_node = first_node;
+  while (current_list_node.next != NULL) {
+    printk("freeing message_slot\n");
+    kfree((*(current_list_node.next)).message_slot1);
+    kfree(current_list_node.next);
+    current_list_node = *(current_list_node.next);
+  }
 
   unregister_chrdev(major, DEVICE_RANGE_NAME);
 }
