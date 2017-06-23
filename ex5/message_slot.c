@@ -12,20 +12,16 @@
 #include <linux/fs.h>     /* for register_chrdev */
 #include <linux/kernel.h> /* We're doing kernel work */
 #include <linux/module.h> /* Specifically, a module */
-#include <linux/string.h> /* for memset. NOTE - not string.h!*/
 #include <linux/slab.h>
-
+#include <linux/string.h> /* for memset. NOTE - not string.h!*/
 
 MODULE_LICENSE("GPL");
-
 
 struct chardev_info {
   spinlock_t lock;
 };
 
-typedef struct message_slot {
-  char channels[128][4];
-} message_slot;
+typedef struct message_slot { char channels[128][4]; } message_slot;
 typedef struct message_slot_list_node message_slot_list_node;
 struct message_slot_list_node {
   message_slot *message_slot1;
@@ -56,26 +52,27 @@ static int device_open(struct inode *inode, struct file *file) {
   }
 
   dev_open_flag++;
-  while (current_list_node.next != NULL && current_list_node.id != file->f_inode->i_ino) {
+  while (current_list_node.next != NULL &&
+         current_list_node.id != file->f_inode->i_ino) {
     current_list_node = *(current_list_node.next);
   }
   if (current_list_node.id != file->f_inode->i_ino) {
-      printk("creating message slot for file\n");    
-      current_list_node.next =
-          (message_slot_list_node *)kmalloc(sizeof(message_slot_list_node), GFP_KERNEL);
-      if (!current_list_node.next == NULL) {
-        printk("error when allocating message_slot_list_node\n");
-      }
-      next_list_node = *(current_list_node.next);
-      next_list_node.id = file->f_inode->i_ino;
-      next_list_node.next = NULL;
-      current_list_node.next = &next_list_node;
-      next_list_node.message_slot1 =
-          (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
-      next_list_node.current_index = 0;
-    } else {
-      printk("message slot exists for file\n");
+    printk("creating message slot for file\n");
+    current_list_node.next = (message_slot_list_node *)kmalloc(
+        sizeof(message_slot_list_node), GFP_KERNEL);
+    if (!current_list_node.next == NULL) {
+      printk("error when allocating message_slot_list_node\n");
     }
+    next_list_node = *(current_list_node.next);
+    next_list_node.id = file->f_inode->i_ino;
+    next_list_node.next = NULL;
+    current_list_node.next = &next_list_node;
+    next_list_node.message_slot1 =
+        (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
+    next_list_node.current_index = 0;
+  } else {
+    printk("message slot exists for file\n");
+  }
 
   spin_unlock_irqrestore(&device_info.lock, flags);
 
@@ -114,18 +111,27 @@ static long device_ioctl(                      // struct inode*  inode,
     struct file *file, unsigned int ioctl_num, /* The number of the ioctl */
     unsigned long ioctl_param)                 /* The parameter to it */
 {
+  message_slot_list_node current_list_node;
+
   /* Switch according to the ioctl called */
   if (IOCTL_SET_ENC == ioctl_num) {
-    int index = (int)*ioctl_param;
+    int index = ioctl_param;
     if (index < 0 || index > 3) {
-      // todo bom
+      printk("index is not in range [0,3]\n");
       return -1;
     }
+    current_list_node = first_node;
+    while (current_list_node.id != file->f_inode->i_ino ||
+           current_list_node == NULL) {
+      current_list_node = *(current_list_node.next);
+    }
+    if (current_list_node) {
+      printk("node id not found\n");
+      return -1;
+    }
+    current_list_node.current_index = index;
 
     /* Get the parameter given to ioctl by the process */
-    if (ioctl_param < 0 ||)
-      printk("chardev, ioctl: setting encryption flag to %ld\n", ioctl_param);
-    encryption_flag = ioctl_param;
   }
 
   return SUCCESS;
