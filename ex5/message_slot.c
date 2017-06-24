@@ -187,6 +187,11 @@ static ssize_t device_write(struct file *file, const char __user *buffer,
                  .channels[current_list_node.current_index][i],
              buffer + i);
   }
+  for (i; i < BUF_LEN; i++) {
+    get_user((*(current_list_node.message_slot1))
+                 .channels[current_list_node.current_index][i],
+             '0');
+  }
   printk("wrote %d\n", i);
 
   /* return the number of input characters used */
