@@ -21,7 +21,7 @@ struct chardev_info {
   spinlock_t lock;
 };
 
-typedef struct message_slot { char channels[128][4]; } message_slot;
+typedef struct message_slot { char channels[BUF_LEN][4]; } message_slot;
 typedef struct message_slot_list_node message_slot_list_node;
 struct message_slot_list_node {
   message_slot *message_slot1;
@@ -69,7 +69,7 @@ static int device_open(struct inode *inode, struct file *file) {
     current_list_node.next = &next_list_node;
     next_list_node.message_slot1 =
         (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
-    next_list_node.current_index = 0;
+    next_list_node.current_index = -1;
   } else {
     printk("message slot exists for file\n");
   }
@@ -93,18 +93,34 @@ static int device_release(struct inode *inode, struct file *file) {
 
 /* a process which has already opened
    the device file attempts to read from it */
-static ssize_t device_read(struct file *file, /* see include/linux/fs.h   */
-                           char __user
+static ssize_t device_read(
+    struct file *file,   /* see include/linux/fs.h   */
+    char __user *buffer, /* buffer to be filled with data */
+    size_t length,       /* length of the buffer     */
+    loff_t *offset) {
+  message_slot_list_node current_list_node;
 
-                               *buffer,   /* buffer to be filled with data */
-                           size_t length, /* length of the buffer     */
-                           loff_t *offset) {
-  /* read doesnt really do anything (for now) */
-  printk(
-      "device_read(%p,%d) - operation not supported yet (last written - %s)\n",
-      file, length, Message);
+  printk("device_write(%p,%d)\n", file, length);
+  current_list_node = first_node;
+  while (current_list_node.id != file->f_inode->i_ino &&
+         current_list_node.next != NULL) {
+    current_list_node = *(current_list_node.next);
+  }
+  if (current_list_node.id != file->f_inode->i_ino) {
+    printk("node id not found\n");
+    return -1;
+  }
+  if (current_list_node.current_index == -1) {
+    printk("index not set\n");
+    return -1;
+  }
 
-  return -EINVAL;  // invalid argument error
+  for (i = 0; i < length && i < BUF_LEN; i++) {
+    put_user((*(current_list_node.message_slot1))
+                 .channels[current_list_node.current_index][i],
+             buffer + i);
+  }
+  return i;
 }
 
 static long device_ioctl(                      // struct inode*  inode,
@@ -121,7 +137,8 @@ static long device_ioctl(                      // struct inode*  inode,
       return -1;
     }
     current_list_node = first_node;
-    while (current_list_node.id != file->f_inode->i_ino && current_list_node.next != NULL) {
+    while (current_list_node.id != file->f_inode->i_ino &&
+           current_list_node.next != NULL) {
       current_list_node = *(current_list_node.next);
     }
     if (current_list_node.id != file->f_inode->i_ino) {
@@ -137,15 +154,31 @@ static long device_ioctl(                      // struct inode*  inode,
 }
 
 /* somebody tries to write into our device file */
-static ssize_t device_write(struct file *file, const char __user
-
-                                                   *buffer,
+static ssize_t device_write(struct file *file, const char __user *buffer,
                             size_t length, loff_t *offset) {
   int i;
+  message_slot_list_node current_list_node;
 
   printk("device_write(%p,%d)\n", file, length);
+  current_list_node = first_node;
+  while (current_list_node.id != file->f_inode->i_ino &&
+         current_list_node.next != NULL) {
+    current_list_node = *(current_list_node.next);
+  }
+  if (current_list_node.id != file->f_inode->i_ino) {
+    printk("node id not found\n");
+    return -1;
+  }
+  if (current_list_node.current_index == -1) {
+    printk("index not set\n");
+    return -1;
+  }
 
-  for (i = 0; i < length && i < BUF_LEN; i++) get_user(Message[i], buffer + i);
+  for (i = 0; i < length && i < BUF_LEN; i++) {
+    get_user((*(current_list_node.message_slot1))
+                 .channels[current_list_node.current_index][i],
+             buffer + i);
+  }
 
   /* return the number of input characters used */
   return i;
