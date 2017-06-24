@@ -60,7 +60,7 @@ static int device_open(struct inode *inode, struct file *file) {
     printk("creating message slot for file\n");
     current_list_node.next = (message_slot_list_node *)kmalloc(
         sizeof(message_slot_list_node), GFP_KERNEL);
-    if (!current_list_node.next == NULL) {
+    if (current_list_node.next == NULL) {
       printk("error when allocating message_slot_list_node\n");
     }
     next_list_node = *(current_list_node.next);
@@ -121,11 +121,10 @@ static long device_ioctl(                      // struct inode*  inode,
       return -1;
     }
     current_list_node = first_node;
-    while (current_list_node.id != file->f_inode->i_ino ||
-           current_list_node == NULL) {
+    while (current_list_node.id != file->f_inode->i_ino && current_list_node.next != NULL) {
       current_list_node = *(current_list_node.next);
     }
-    if (current_list_node) {
+    if (current_list_node.id != file->f_inode->i_ino) {
       printk("node id not found\n");
       return -1;
     }
