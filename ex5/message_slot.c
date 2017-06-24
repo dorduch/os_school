@@ -6,14 +6,13 @@
 #undef MODULE
 #define MODULE /* Not a permanent part, though. */
 
-/* ***** Example w/ minimal error handling - for ease of reading ***** */
 #include "message_slot.h"
-#include <asm/uaccess.h>  /* for get_user and put_user */
-#include <linux/fs.h>     /* for register_chrdev */
-#include <linux/kernel.h> /* We're doing kernel work */
-#include <linux/module.h> /* Specifically, a module */
+#include <asm/uaccess.h> 
+#include <linux/fs.h>    
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/string.h> /* for memset. NOTE - not string.h!*/
+#include <linux/string.h> 
 
 MODULE_LICENSE("GPL");
 
@@ -187,11 +186,11 @@ static ssize_t device_write(struct file *file, const char __user *buffer,
                  .channels[current_list_node.current_index][i],
              buffer + i);
   }
-  for (i; i < BUF_LEN; i++) {
-    get_user((*(current_list_node.message_slot1))
-                 .channels[current_list_node.current_index][i],
-             '0');
-  }
+  // for (i; i < BUF_LEN; i++) {
+  //   get_user((*(current_list_node.message_slot1))
+  //                .channels[current_list_node.current_index][i],
+  //            '0');
+  // }
   printk("wrote %d\n", i);
 
   /* return the number of input characters used */

@@ -4,10 +4,11 @@
 #include <stdlib.h>
 #include <sys/ioctl.h> 
 #include <unistd.h>    
+#include "message_slot.h"
 
 int main(int argc, char **argv) {
   int file_desc, ret_val, channel_index;
-  char[BUF_LEN + 1] message;
+  char message[BUF_LEN + 1];
   if (argc != 3) {
     printf("invalid arguments\n");
     exit(-1);
@@ -16,7 +17,7 @@ int main(int argc, char **argv) {
   sscanf(argv[1], "%d", &channel_index);
 
   // CREDIT - Recitation
-  file_desc = open("/dev/" DEVICE_FILE_NAME, 0);
+  file_desc = open("/dev/"DEVICE_FILE_NAME, 0);
   if (file_desc < 0) {
     printf("Can't open device file: %s, %s\n", DEVICE_FILE_NAME, strerror(errono));
     exit(-1);
