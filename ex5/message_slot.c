@@ -7,12 +7,12 @@
 #define MODULE /* Not a permanent part, though. */
 
 #include "message_slot.h"
-#include <asm/uaccess.h> 
-#include <linux/fs.h>    
+#include <asm/uaccess.h>
+#include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/string.h> 
+#include <linux/string.h>
 
 MODULE_LICENSE("GPL");
 
@@ -53,23 +53,24 @@ static int device_open(struct inode *inode, struct file *file) {
   dev_open_flag++;
   while (current_list_node.next != NULL &&
          current_list_node.id != file->f_inode->i_ino) {
+           printk("in while new node\n");
     current_list_node = *(current_list_node.next);
   }
   if (current_list_node.id != file->f_inode->i_ino) {
     printk("creating message slot for file %d\n", file->f_inode->i_ino);
-    current_list_node.next = (message_slot_list_node *)kmalloc(
-        sizeof(message_slot_list_node), GFP_KERNEL);
-    if (current_list_node.next == NULL) {
-      printk("error when allocating message_slot_list_node\n");
-    }
-    next_list_node = *(current_list_node.next);
+    // current_list_node.next = (message_slot_list_node *)kmalloc(
+    //     sizeof(message_slot_list_node), GFP_KERNEL);
+    // if (current_list_node.next == NULL) {
+    //   printk("error when allocating message_slot_list_node\n");
+    // }
+    // next_list_node = *(current_list_node.next);
     next_list_node.id = file->f_inode->i_ino;
     next_list_node.next = NULL;
-    current_list_node.next = &next_list_node;
     next_list_node.message_slot1 =
         (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
     next_list_node.current_index = -1;
-    printk("created new node\n");
+    current_list_node.next = &next_list_node;
+    printk("created new node %p\n", current_list_node.next);
 
   } else {
     printk("message slot exists for file\n");
@@ -130,6 +131,9 @@ static long device_ioctl(                      // struct inode*  inode,
     struct file *file, unsigned int ioctl_num, /* The number of the ioctl */
     unsigned long ioctl_param)                 /* The parameter to it */
 {
+   spin_lock_irqsave(&device_info.lock, flags);
+ 
+
   message_slot_list_node current_list_node;
   printk("in ioctl to %d\n", file->f_inode->i_ino);
 
@@ -143,14 +147,17 @@ static long device_ioctl(                      // struct inode*  inode,
     current_list_node = first_node;
     while (current_list_node.id != file->f_inode->i_ino &&
            current_list_node.next != NULL) {
+      printk("in while %d", current_list_node.id);
       current_list_node = *(current_list_node.next);
     }
+
     if (current_list_node.id != file->f_inode->i_ino) {
       printk("node id not found\n");
       return -1;
     }
     current_list_node.current_index = index;
     printk("index set to %d\n", index);
+  spin_unlock_irqrestore(&device_info.lock, flags);
 
     /* Get the parameter given to ioctl by the process */
   }
