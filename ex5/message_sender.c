@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
   // CREDIT - Recitation
   file_desc = open("/dev/"DEVICE_FILE_NAME, 0);
   if (file_desc < 0) {
-    printf("Can't open device file: %s, %s\n", DEVICE_FILE_NAME, strerror(errono));
+    printf("Can't open device file: %s, %s\n", DEVICE_FILE_NAME, strerror(errno));
     exit(-1);
   }
 
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   strncpy(message, argv[2], BUF_LEN + 1);
   message[BUF_LEN] = '\0';
   if (write(file_desc, message, sizeof(message)) < 0) {
-    printf("error while writing to file %s\n", strerror(errono));
+    printf("error while writing to file %s\n", strerror(errno));
   }
   close(file_desc);
   printf("message %s was sent to device %s on channel %d\n", message, DEVICE_FILE_NAME, channel_index);
