@@ -57,7 +57,7 @@ static int device_open(struct inode *inode, struct file *file) {
     current_list_node = *(current_list_node.next);
   }
   if (current_list_node.id != file->f_inode->i_ino) {
-    printk("creating message slot for file\n");
+    printk("creating message slot for file %d\n", file->f_inode->i_ino);
     current_list_node.next = (message_slot_list_node *)kmalloc(
         sizeof(message_slot_list_node), GFP_KERNEL);
     if (current_list_node.next == NULL) {
@@ -70,10 +70,11 @@ static int device_open(struct inode *inode, struct file *file) {
     next_list_node.message_slot1 =
         (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
     next_list_node.current_index = -1;
+    printk("created new node\n");
+
   } else {
     printk("message slot exists for file\n");
   }
-
   spin_unlock_irqrestore(&device_info.lock, flags);
 
   return SUCCESS;
@@ -99,8 +100,8 @@ static ssize_t device_read(
     size_t length,       /* length of the buffer     */
     loff_t *offset) {
   message_slot_list_node current_list_node;
-
-  printk("device_write(%p,%d)\n", file, length);
+  int i;
+  printk("in read to %d\n", file->f_inode->i_ino);
   current_list_node = first_node;
   while (current_list_node.id != file->f_inode->i_ino &&
          current_list_node.next != NULL) {
@@ -114,12 +115,15 @@ static ssize_t device_read(
     printk("index not set\n");
     return -1;
   }
+  printk("found the node, writing from channel %d\n",
+         current_list_node.current_index);
 
   for (i = 0; i < length && i < BUF_LEN; i++) {
     put_user((*(current_list_node.message_slot1))
                  .channels[current_list_node.current_index][i],
              buffer + i);
   }
+  printk("wrote %d\n", i);
   return i;
 }
 
@@ -128,6 +132,7 @@ static long device_ioctl(                      // struct inode*  inode,
     unsigned long ioctl_param)                 /* The parameter to it */
 {
   message_slot_list_node current_list_node;
+  printk("in ioctl to %d\n", file->f_inode->i_ino);
 
   /* Switch according to the ioctl called */
   if (IOCTL_SET_ENC == ioctl_num) {
@@ -146,6 +151,7 @@ static long device_ioctl(                      // struct inode*  inode,
       return -1;
     }
     current_list_node.current_index = index;
+    printk("index set to %d\n", index);
 
     /* Get the parameter given to ioctl by the process */
   }
@@ -156,10 +162,11 @@ static long device_ioctl(                      // struct inode*  inode,
 /* somebody tries to write into our device file */
 static ssize_t device_write(struct file *file, const char __user *buffer,
                             size_t length, loff_t *offset) {
+  printk("in write to %d\n", file->f_inode->i_ino);
+
   int i;
   message_slot_list_node current_list_node;
 
-  printk("device_write(%p,%d)\n", file, length);
   current_list_node = first_node;
   while (current_list_node.id != file->f_inode->i_ino &&
          current_list_node.next != NULL) {
@@ -173,12 +180,14 @@ static ssize_t device_write(struct file *file, const char __user *buffer,
     printk("index not set\n");
     return -1;
   }
-
+  printk("found the node, writing to channel %d\n",
+         current_list_node.current_index);
   for (i = 0; i < length && i < BUF_LEN; i++) {
     get_user((*(current_list_node.message_slot1))
                  .channels[current_list_node.current_index][i],
              buffer + i);
   }
+  printk("wrote %d\n", i);
 
   /* return the number of input characters used */
   return i;
@@ -231,12 +240,7 @@ static int __init init(void) {
 
 /* Cleanup - unregister the appropriate file from /proc */
 static void __exit cleanup(void) {
-  /*
-   * Unregister the device
-   * should always succeed (didnt used to in older kernel versions)
-   */
-
-  // free them all
+  printk("in exit\n");
   struct message_slot_list_node current_list_node = first_node;
   while (current_list_node.next != NULL) {
     printk("freeing message_slot\n");
@@ -245,7 +249,7 @@ static void __exit cleanup(void) {
     current_list_node = *(current_list_node.next);
   }
 
-  unregister_chrdev(major, DEVICE_RANGE_NAME);
+  unregister_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME);
 }
 
 module_init(init);
