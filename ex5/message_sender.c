@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
   sscanf(argv[1], "%d", &channel_index);
 
   // CREDIT - Recitation
-  file_desc = open("/dev/"DEVICE_FILE_NAME, 0);
+  file_desc = open("/dev/"DEVICE_FILE_NAME, O_WRONLY);
   if (file_desc < 0) {
     printf("Can't open device file: %s, %s\n", DEVICE_FILE_NAME, strerror(errno));
     exit(-1);
@@ -34,9 +34,13 @@ int main(int argc, char **argv) {
   // https://linux.die.net/man/3/strncpy
   strncpy(message, argv[2], BUF_LEN + 1);
   message[BUF_LEN] = '\0';
-  if (write(file_desc, message, sizeof(message)) < 0) {
+  printf("buffer success 2: %s\n", message);
+
+  
+  if (write(file_desc, message, BUF_LEN) < 0) {
     printf("error while writing to file %s\n", strerror(errno));
   }
+  printf("write success\n");  
   close(file_desc);
   printf("message %s was sent to device %s on channel %d\n", message, DEVICE_FILE_NAME, channel_index);
   return 0;

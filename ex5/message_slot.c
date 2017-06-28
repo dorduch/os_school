@@ -1,8 +1,9 @@
-/* Declare what kind of code we want from the header files
-   Defining __KERNEL__ and MODULE allows us to access kernel-level
-   code not usually available to userspace programs. */
-#undef __KERNEL__
-#define __KERNEL__ /* We're part of the kernel */
+/* tmp = current_ = mu = r tmp_list_nodel_s =
+    (message_slot_list_node *)kmalloc(sizeof(message_slot_list_node),
+                                      GFP_KERNEL) t->ltmpe_stmp_list_node = mu =
+        r tmp_list_nodel_st->ltmpe_s ltt & _list_nmpe_ * oiop_lise_noli;
+t_usrent_ - &->>->> --->> -* >>->e->me->next->>->>> &->->>> od e->mes->->>
+    slo1->channels[current_list_node->current_index]
 #undef MODULE
 #define MODULE /* Not a permanent part, though. */
 
@@ -39,9 +40,9 @@ static int major; /* device major number */
 /* process attempts to open the device file */
 static int device_open(struct inode *inode, struct file *file) {
   unsigned long flags;  // for spinlock
-  message_slot_list_node current_list_node;
-  message_slot_list_node next_list_node;
-  current_list_node = first_node;
+  message_slot_list_node* current_list_node;
+  message_slot_list_node* next_list_node = (message_slot_list_node*)kmalloc(sizeof(message_slot_list_node), GFP_KERNEL);
+  current_list_node = &first_node;
   printk("device_open(%p)\n", file);
 
   spin_lock_irqsave(&device_info.lock, flags);
@@ -51,12 +52,12 @@ static int device_open(struct inode *inode, struct file *file) {
   }
 
   dev_open_flag++;
-  while (current_list_node.next != NULL &&
-         current_list_node.id != file->f_inode->i_ino) {
+  while (current_list_node->next != NULL &&
+         current_list_node->id != file->f_inode->i_ino) {
            printk("in while new node\n");
-    current_list_node = *(current_list_node.next);
+    current_list_node = current_list_node->next;
   }
-  if (current_list_node.id != file->f_inode->i_ino) {
+  if (current_list_node->id != file->f_inode->i_ino) {
     printk("creating message slot for file %d\n", file->f_inode->i_ino);
     // current_list_node.next = (message_slot_list_node *)kmalloc(
     //     sizeof(message_slot_list_node), GFP_KERNEL);
@@ -64,13 +65,13 @@ static int device_open(struct inode *inode, struct file *file) {
     //   printk("error when allocating message_slot_list_node\n");
     // }
     // next_list_node = *(current_list_node.next);
-    next_list_node.id = file->f_inode->i_ino;
-    next_list_node.next = NULL;
-    next_list_node.message_slot1 =
+    next_list_node->id = file->f_inode->i_ino;
+    next_list_node->next = NULL;
+    next_list_node->message_slot1 =
         (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
-    next_list_node.current_index = -1;
-    current_list_node.next = &next_list_node;
-    printk("created new node %p\n", current_list_node.next);
+    next_list_node->current_index = -1;
+    current_list_node->next = next_list_node;
+    printk("created new node %p\n", current_list_node->next);
 
   } else {
     printk("message slot exists for file\n");
@@ -99,28 +100,27 @@ static ssize_t device_read(
     char __user *buffer, /* buffer to be filled with data */
     size_t length,       /* length of the buffer     */
     loff_t *offset) {
-  message_slot_list_node current_list_node;
+  message_slot_list_node* current_list_node;
   int i;
   printk("in read to %d\n", file->f_inode->i_ino);
-  current_list_node = first_node;
-  while (current_list_node.id != file->f_inode->i_ino &&
-         current_list_node.next != NULL) {
-    current_list_node = *(current_list_node.next);
+  current_list_node = &first_node;
+  while (current_list_node->id != file->f_inode->i_ino &&
+         current_list_node->next != NULL) {
+    current_list_node = current_list_node->next;
   }
-  if (current_list_node.id != file->f_inode->i_ino) {
+  if (current_list_node->id != file->f_inode->i_ino) {
     printk("node id not found\n");
     return -1;
   }
-  if (current_list_node.current_index == -1) {
+  if (current_list_node->current_index == -1) {
     printk("index not set\n");
     return -1;
   }
   printk("found the node, writing from channel %d\n",
-         current_list_node.current_index);
+         current_list_node->current_index);
 
   for (i = 0; i < length && i < BUF_LEN; i++) {
-    put_user((*(current_list_node.message_slot1))
-                 .channels[current_list_node.current_index][i],
+    put_user(current_list_node -> message_slot1 ->channels[current_list_node->current_index][i],
              buffer + i);
   }
   printk("wrote %d\n", i);
@@ -131,10 +131,9 @@ static long device_ioctl(                      // struct inode*  inode,
     struct file *file, unsigned int ioctl_num, /* The number of the ioctl */
     unsigned long ioctl_param)                 /* The parameter to it */
 {
-   spin_lock_irqsave(&device_info.lock, flags);
  
 
-  message_slot_list_node current_list_node;
+  message_slot_list_node* current_list_node;
   printk("in ioctl to %d\n", file->f_inode->i_ino);
 
   /* Switch according to the ioctl called */
@@ -144,20 +143,19 @@ static long device_ioctl(                      // struct inode*  inode,
       printk("index is not in range [0,3]\n");
       return -1;
     }
-    current_list_node = first_node;
-    while (current_list_node.id != file->f_inode->i_ino &&
-           current_list_node.next != NULL) {
-      printk("in while %d", current_list_node.id);
-      current_list_node = *(current_list_node.next);
+    current_list_node = &first_node;
+    while (current_list_node->id != file->f_inode->i_ino &&
+           current_list_node->next != NULL) {
+      printk("in while %d\n", current_list_node->id);
+      current_list_node = current_list_node->next;
     }
 
-    if (current_list_node.id != file->f_inode->i_ino) {
+    if (current_list_node->id != file->f_inode->i_ino) {
       printk("node id not found\n");
       return -1;
     }
-    current_list_node.current_index = index;
+    current_list_node->current_index = index;
     printk("index set to %d\n", index);
-  spin_unlock_irqrestore(&device_info.lock, flags);
 
     /* Get the parameter given to ioctl by the process */
   }
@@ -171,28 +169,29 @@ static ssize_t device_write(struct file *file, const char __user *buffer,
   printk("in write to %d\n", file->f_inode->i_ino);
 
   int i;
-  message_slot_list_node current_list_node;
+  message_slot_list_node* current_list_node;
 
-  current_list_node = first_node;
-  while (current_list_node.id != file->f_inode->i_ino &&
-         current_list_node.next != NULL) {
-    current_list_node = *(current_list_node.next);
+  current_list_node = &first_node;
+  while (current_list_node->id != file->f_inode->i_ino &&
+         current_list_node->next != NULL) {
+    current_list_node = current_list_node->next;
   }
-  if (current_list_node.id != file->f_inode->i_ino) {
+  if (current_list_node->id != file->f_inode->i_ino) {
     printk("node id not found\n");
     return -1;
   }
-  if (current_list_node.current_index == -1) {
+  if (current_list_node->current_index == -1) {
     printk("index not set\n");
     return -1;
   }
   printk("found the node, writing to channel %d\n",
-         current_list_node.current_index);
+         current_list_node->current_index);
   for (i = 0; i < length && i < BUF_LEN; i++) {
-    get_user((*(current_list_node.message_slot1))
-                 .channels[current_list_node.current_index][i],
+    get_user(current_list_node->message_slot1->channels[current_list_node->current_index][i],
              buffer + i);
   }
+  printk("messaged received: %s\n", buffer);
+  printk("messaged saved: %s\n", current_list_node->message_slot1->channels[current_list_node->current_index]);
   // for (i; i < BUF_LEN; i++) {
   //   get_user((*(current_list_node.message_slot1))
   //                .channels[current_list_node.current_index][i],
@@ -252,12 +251,16 @@ static int __init init(void) {
 /* Cleanup - unregister the appropriate file from /proc */
 static void __exit cleanup(void) {
   printk("in exit\n");
-  struct message_slot_list_node current_list_node = first_node;
-  while (current_list_node.next != NULL) {
+  struct message_slot_list_node* current_list_node = &first_node;
+    struct message_slot_list_node* tmp_list_node;
+
+  while (current_list_node->next != NULL) {
     printk("freeing message_slot\n");
-    kfree((*(current_list_node.next)).message_slot1);
-    kfree(current_list_node.next);
-    current_list_node = *(current_list_node.next);
+    kfree(current_list_node->next->message_slot1);
+    tmp_list_node = current_list_node->next;
+    kfree(current_list_node->next);
+
+    current_list_node = tmp_list_node;
   }
 
   unregister_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME);
