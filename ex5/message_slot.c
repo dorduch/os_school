@@ -91,21 +91,18 @@ static ssize_t device_read(struct file *file, char __user *buffer,
     printk("index not set\n");
     return -1;
   }
-         current_list_node->current_index);
 
-         for (i = 0; i < length && i < BUF_LEN; i++) {
-           put_user(current_list_node->message_slot1
-                        ->channels[current_list_node->current_index][i],
-                    buffer + i);
-         }
-         return i;
+  for (i = 0; i < length && i < BUF_LEN; i++) {
+    put_user(current_list_node->message_slot1
+                 ->channels[current_list_node->current_index][i],
+             buffer + i);
+  }
+  return i;
 }
 
 static long device_ioctl(struct file *file, unsigned int ioctl_num,
                          unsigned long ioctl_param) {
   message_slot_list_node *current_list_node;
-  printk("in ioctl to %d\n", file->f_inode->i_ino);
-
   /* Switch according to the ioctl called */
   if (IOCTL_SET_ENC == ioctl_num) {
     int index = ioctl_param;
@@ -131,8 +128,6 @@ static long device_ioctl(struct file *file, unsigned int ioctl_num,
 
 static ssize_t device_write(struct file *file, const char __user *buffer,
                             size_t length, loff_t *offset) {
-  printk("in write to %d\n", file->f_inode->i_ino);
-
   int i;
   message_slot_list_node *current_list_node;
 
@@ -149,13 +144,12 @@ static ssize_t device_write(struct file *file, const char __user *buffer,
     printk("index not set\n");
     return -1;
   }
-         current_list_node->current_index);
-         for (i = 0; i < length && i < BUF_LEN; i++) {
-           get_user(current_list_node->message_slot1
-                        ->channels[current_list_node->current_index][i],
-                    buffer + i);
-         }
-         return i;
+  for (i = 0; i < length && i < BUF_LEN; i++) {
+    get_user(current_list_node->message_slot1
+                 ->channels[current_list_node->current_index][i],
+             buffer + i);
+  }
+  return i;
 }
 
 /************** Module Declarations *****************/
@@ -164,7 +158,7 @@ struct file_operations Fops = {
     .open = device_open,
     .unlocked_ioctl = device_ioctl,
     .read = device_read,
-    .write = device_write,    
+    .write = device_write,
     .release = device_release,
 };
 
