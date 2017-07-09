@@ -30,9 +30,14 @@ static int major;
 
 static int device_open(struct inode *inode, struct file *file) {
   unsigned long flags;
+  int i, j;
   message_slot_list_node *current_list_node;
   message_slot_list_node *next_list_node = (message_slot_list_node *)kmalloc(
       sizeof(message_slot_list_node), GFP_KERNEL);
+  if (next_list_node == NULL) {
+    printk("error when kmalloc next list node\n");
+    return -1;
+  }
   current_list_node = &first_node;
   printk("device_open(%p)\n", file);
 
@@ -52,6 +57,15 @@ static int device_open(struct inode *inode, struct file *file) {
     next_list_node->next = NULL;
     next_list_node->message_slot1 =
         (message_slot *)kmalloc(sizeof(message_slot), GFP_KERNEL);
+    if (next_list_node->message_slot1 == NULL) {
+      printk("error when kmalloc message_slot1\n");
+      return -1;
+    }
+    for (i = 0; i < 4; i++) {
+      for (j = 0; j < BUF_LEN; j++) {
+        next_list_node->message_slot1->channels[i][j] = 0;
+      }
+    }
     next_list_node->current_index = -1;
     current_list_node->next = next_list_node;
 
@@ -93,9 +107,12 @@ static ssize_t device_read(struct file *file, char __user *buffer,
   }
 
   for (i = 0; i < length && i < BUF_LEN; i++) {
-    put_user(current_list_node->message_slot1
-                 ->channels[current_list_node->current_index][i],
-             buffer + i);
+    if (put_user(current_list_node->message_slot1
+                     ->channels[current_list_node->current_index][i],
+                 buffer + i) != 0) {
+      printk("Error in put user\n");
+      return -1;
+    }
   }
   return i;
 }
@@ -165,8 +182,8 @@ struct file_operations Fops = {
 static int __init init(void) {
   memset(&device_info, 0, sizeof(struct chardev_info));
   spin_lock_init(&device_info.lock);
-  major =
-      register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &Fops);  // todo check error
+  major = register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME,
+                          &Fops);  // todo check error
   if (major < 0) {
     printk(KERN_ALERT "%s failed with %d\n",
            "Sorry, registering the character device ", MAJOR_NUM);

@@ -41,7 +41,6 @@ int main(int argc, char **argv) {
   if (write(file_desc, message, BUF_LEN) < 0) {
     printf("error while writing to file %s\n", strerror(errno));
   }
-  printf("write success\n");  
   close(file_desc);
   printf("message %s was sent to device %s on channel %d\n", message, DEVICE_FILE_NAME, channel_index);
   return 0;

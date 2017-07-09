@@ -1,10 +1,10 @@
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/ioctl.h> 
 #include <string.h>
-#include <unistd.h>    
+#include <sys/ioctl.h>
+#include <unistd.h>
 #include "message_slot.h"
 
 int main(int argc, char **argv) {
@@ -18,9 +18,10 @@ int main(int argc, char **argv) {
   sscanf(argv[1], "%d", &channel_index);
 
   // CREDIT - Recitation
-  file_desc = open("/dev/"DEVICE_FILE_NAME, O_RDONLY);
+  file_desc = open("/dev/" DEVICE_FILE_NAME, O_RDONLY);
   if (file_desc < 0) {
-    printf("Can't open device file: %s, %s\n", DEVICE_FILE_NAME, strerror(errno));
+    printf("Can't open device file: %s, %s\n", DEVICE_FILE_NAME,
+           strerror(errno));
     exit(-1);
   }
 
@@ -31,12 +32,16 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
-  
   if (read(file_desc, message, BUF_LEN) < 0) {
     printf("error while writing to file %s\n", strerror(errno));
   }
-  printf("write success\n");  
   close(file_desc);
-  printf("message %s was received from device %s on channel %d\n", message, DEVICE_FILE_NAME, channel_index);
+  if (strcmp(message, "") == 0) {
+    printf("empty message received from device %s on channel %d\n",
+           DEVICE_FILE_NAME, channel_index);
+  } else {
+    printf("message %s was received from device %s on channel %d\n", message,
+           DEVICE_FILE_NAME, channel_index);
+  }
   return 0;
 }
